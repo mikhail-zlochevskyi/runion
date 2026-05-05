@@ -22,12 +22,12 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "runion · find your run buddy",
-  description: "Find a running partner at your pace. Like Grab, but for runs.",
+  title: "runion · matched runs at your pace",
+  description: "Find 2-3 runners at your pace. No random groups.",
   applicationName: "runion",
   openGraph: {
-    title: "runion · find your run buddy",
-    description: "Find a running partner at your pace. Like Grab, but for runs.",
+    title: "runion · matched runs at your pace",
+    description: "Find 2-3 runners at your pace. No random groups.",
     url: "https://runion.app",
     type: "website"
   }

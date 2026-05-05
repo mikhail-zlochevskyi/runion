@@ -54,3 +54,25 @@ export type RunFormInput = {
   womenOnly: boolean;
   clubName?: string;
 };
+
+export type RunnerType = "consistent" | "race_training" | "returning";
+
+export type RunIntent = "consistency" | "performance" | "like_minded" | "easy_social";
+
+export type RunAvailability = "morning" | "evening" | "weekends";
+
+export type PreferredGroupSize = "one_to_one" | "two_to_three" | "four_plus";
+
+export type RunnerProfile = {
+  id?: string;
+  email?: string;
+  name: string;
+  runner_type: RunnerType;
+  comfortable_pace_seconds_per_km: number;
+  run_intents: RunIntent[];
+  availability: RunAvailability[];
+  preferred_group_size: PreferredGroupSize;
+  instagram?: string;
+  profile_photo_url?: string;
+  onboarding_completed: boolean;
+};

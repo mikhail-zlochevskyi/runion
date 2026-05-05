@@ -1,7 +1,6 @@
-import { RunionMobileApp } from "@/components/runion-mobile-app";
+import { redirect } from "next/navigation";
 import { DEFAULT_CITY } from "@/lib/config";
-import { getSeedRuns } from "@/lib/runs";
 
 export default function Home() {
-  return <RunionMobileApp initialCity={DEFAULT_CITY} initialRuns={getSeedRuns(DEFAULT_CITY)} />;
+  redirect(`/runs#${DEFAULT_CITY}`);
 }

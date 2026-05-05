@@ -1,10 +1,10 @@
 # runion
 
-Map-first running partner matching app.
+Mobile-first running partner matching app.
 
 This repo starts from the current production single-file mobile prototype and turns it into a Next.js + Supabase architecture:
 
-- Next.js App Router shell with Leaflet map UI
+- Next.js App Router shell with mobile-first onboarding and matched runs UI
 - typed run/match contracts
 - Supabase PostGIS schema and RLS
 - Edge Function skeletons for matching, reminders, no-shows, expiry, and next-run prompts
@@ -33,4 +33,53 @@ npm run build
 3. Fill `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 4. Apply `supabase/migrations/0001_initial_architecture.sql`.
 
-The app currently uses seed data while the Supabase read/write path is wired.
+The app currently uses deterministic matched-run seed data while the Supabase read/write path is wired.
+
+## Onboarding Flow
+
+Runion is positioned around matching, not browsing: "Find 2-3 runners at your pace. No random groups."
+
+New users move through:
+
+1. Auth with Google OAuth or Supabase email magic link.
+2. Runner identity.
+3. Comfortable pace, stored as `comfortable_pace_seconds_per_km`.
+4. Run intent.
+5. Availability.
+6. Preferred group size.
+7. Trust profile with name, optional Instagram, and a profile-photo placeholder.
+8. Interactive matched runs map/list with "Request spot" CTAs.
+
+Saved profile fields:
+
+- `runner_type`
+- `comfortable_pace_seconds_per_km`
+- `run_intents`
+- `availability`
+- `preferred_group_size`
+- `instagram`
+- `onboarding_completed`
+- `profile_photo_url` / existing `avatar_url`
+
+Phone auth is intentionally left as a TODO until the deployed Supabase project is configured for it.
+
+## Infrastructure Checklist
+
+Required credentials and secrets to share/configure:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by the browser and server clients.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public Supabase anon key used with RLS-protected browser requests.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only key for Edge Functions and trusted backend jobs. Never expose this in the client.
+- Google OAuth client ID and client secret: configure in Supabase Auth under Google provider for "Get matched with Google".
+- Supabase Auth redirect URLs: local `http://localhost:3000`, production app URL, and any preview deployment URLs that should accept magic links/OAuth returns.
+- Email auth SMTP settings or Supabase managed email configuration: required for production-quality magic links.
+- `NEXT_PUBLIC_DEFAULT_CITY`: default city slug for seeded matching and map center, currently `bcn`.
+
+Optional / later:
+
+- Supabase Storage bucket and policies for profile photos. The UI currently has a placeholder until upload is enabled.
+- Phone auth provider credentials if phone login becomes a priority.
+- `RESEND_API_KEY` and `RESEND_FROM` for notification email jobs.
+- WhatsApp provider values: `WHATSAPP_PROVIDER`, `WHATSAPP_API_KEY`, and `WHATSAPP_NAMESPACE`.
+- Production database password / direct connection string for migrations, kept outside the app runtime.
+- Hosting project token or deploy hook if CI/CD should deploy automatically.

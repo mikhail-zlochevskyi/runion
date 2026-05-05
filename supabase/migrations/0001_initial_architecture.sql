@@ -13,6 +13,16 @@ create table public.users (
   avatar_url text,
   strava_url text,
   garmin_url text,
+  runner_type text,
+  comfortable_pace_seconds_per_km integer check (
+    comfortable_pace_seconds_per_km is null
+    or comfortable_pace_seconds_per_km between 270 and 420
+  ),
+  run_intents text[] not null default '{}',
+  availability text[] not null default '{}',
+  preferred_group_size text,
+  instagram text,
+  onboarding_completed boolean not null default false,
   reliability_score integer not null default 100 check (reliability_score between 0 and 100),
   verified_at timestamptz,
   gender text,
@@ -22,19 +32,27 @@ create table public.users (
 
 create table public.runs (
   id uuid primary key default gen_random_uuid(),
+  title text,
+  description text,
   organiser_id uuid not null references public.users(id) on delete cascade,
+  created_by uuid references public.users(id) on delete cascade,
   city text not null,
   location_name text not null,
   location geography(point, 4326) not null,
   day text not null,
   run_date date not null,
   time time not null,
+  start_time timestamptz,
   pace_min interval not null,
   pace_max interval not null,
+  pace_seconds integer,
   distance_km numeric(5, 2) not null check (distance_km > 0),
   goal text not null default 'Steady',
+  intent text,
   spots_total integer not null default 1 check (spots_total between 1 and 8),
   spots_taken integer not null default 0 check (spots_taken >= 0),
+  max_group_size integer not null default 3 check (max_group_size between 1 and 8),
+  current_spots integer not null default 1 check (current_spots >= 0),
   women_only boolean not null default false,
   status public.run_status not null default 'draft',
   club_name text,
@@ -48,7 +66,20 @@ create table public.runs (
 
 create index runs_location_idx on public.runs using gist(location);
 create index runs_city_status_date_idx on public.runs(city, status, run_date, time);
+create index runs_start_time_idx on public.runs(start_time);
 create index runs_organiser_idx on public.runs(organiser_id);
+
+create table public.run_participants (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.runs(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  status text not null default 'requested',
+  created_at timestamptz not null default now(),
+  unique(run_id, user_id)
+);
+
+create index run_participants_run_idx on public.run_participants(run_id);
+create index run_participants_user_idx on public.run_participants(user_id);
 
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
@@ -169,8 +200,47 @@ create trigger sync_run_spots_after_match
 after insert or update of status or delete on public.matches
 for each row execute function public.sync_run_spots();
 
+create or replace function public.sync_run_participant_spots()
+returns trigger
+language plpgsql
+as $$
+declare
+  target_run_id uuid;
+  requested_count integer;
+begin
+  target_run_id := case when tg_op = 'DELETE' then old.run_id else new.run_id end;
+
+  select count(*)
+  into requested_count
+  from public.run_participants
+  where run_id = target_run_id
+    and status in ('requested', 'confirmed');
+
+  update public.runs
+  set
+    current_spots = greatest(1, requested_count),
+    status = case
+      when greatest(1, requested_count) >= max_group_size then 'full'::public.run_status
+      when status = 'full' then 'active'::public.run_status
+      else status
+    end
+  where id = target_run_id;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger sync_run_spots_after_participant
+after insert or update of status or delete on public.run_participants
+for each row execute function public.sync_run_participant_spots();
+
 alter table public.users enable row level security;
 alter table public.runs enable row level security;
+alter table public.run_participants enable row level security;
 alter table public.matches enable row level security;
 alter table public.reviews enable row level security;
 alter table public.reports enable row level security;
@@ -182,6 +252,23 @@ for select using (status in ('active', 'full', 'completed'));
 
 create policy "organisers manage their runs" on public.runs
 for all using (auth.uid() = organiser_id) with check (auth.uid() = organiser_id);
+
+create policy "run participants read own requests" on public.run_participants
+for select using (
+  auth.uid() = user_id
+  or exists (select 1 from public.runs where runs.id = run_participants.run_id and (runs.organiser_id = auth.uid() or runs.created_by = auth.uid()))
+);
+
+create policy "users request run spots" on public.run_participants
+for insert with check (auth.uid() = user_id and status = 'requested');
+
+create policy "hosts update run requests" on public.run_participants
+for update using (
+  exists (select 1 from public.runs where runs.id = run_participants.run_id and (runs.organiser_id = auth.uid() or runs.created_by = auth.uid()))
+) with check (
+  exists (select 1 from public.runs where runs.id = run_participants.run_id and (runs.organiser_id = auth.uid() or runs.created_by = auth.uid()))
+  and status in ('requested', 'confirmed', 'declined')
+);
 
 create policy "users read own profile" on public.users
 for select using (auth.uid() = id);
