@@ -982,7 +982,7 @@ function PostRunScreen({
         {error ? <p className="auth-notice">{error}</p> : null}
 
         <button className="primary-cta sticky-cta" onClick={submitRun} disabled={busy}>
-          {busy ? "Pushing…" : "PUSH"}
+          {busy ? "Posting..." : "Post run"}
         </button>
       </section>
       <RunionTabNav active="post" onMap={onMap} onPost={() => undefined} onRuns={onBack} />
