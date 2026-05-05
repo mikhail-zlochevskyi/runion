@@ -122,6 +122,16 @@ button {
   border-radius: 50%;
 }
 
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  pointer-events: all;
+}
+
+.profile-icon-btn {
+  color: var(--sun);
+}
+
 .icon-btn.loading {
   color: var(--sun);
   animation: locate-spin 1s linear infinite;
@@ -1136,6 +1146,24 @@ button {
   accent-color: var(--terracotta);
 }
 
+.onboarding-pace-range {
+  display: grid;
+  gap: 13px;
+}
+
+.onboarding-pace-range label {
+  display: grid;
+  gap: 7px;
+}
+
+.onboarding-pace-range label span {
+  color: var(--muted);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .slider-labels {
   display: flex;
   justify-content: space-between;
@@ -1333,7 +1361,8 @@ button {
 }
 
 .runs-panel,
-.post-run-panel {
+.post-run-panel,
+.profile-panel {
   width: min(100%, 520px);
   margin: 0 auto;
   padding: 18px 18px calc(env(safe-area-inset-bottom, 0px) + 136px);
@@ -1344,12 +1373,72 @@ button {
   gap: 14px;
 }
 
-.post-run-panel {
+.post-run-panel,
+.profile-panel {
   display: grid;
   min-height: calc(100dvh - 84px);
   grid-template-rows: auto auto auto auto;
   align-content: start;
   gap: 16px;
+}
+
+.profile-panel {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 154px);
+}
+
+.profile-header h1 {
+  max-width: none;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.055);
+  padding: 12px;
+}
+
+.profile-picture {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(244, 164, 92, 0.36);
+  border-radius: 50%;
+  background: rgba(244, 164, 92, 0.1);
+  color: var(--sun);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+.profile-picture img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-identity div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.profile-identity strong {
+  overflow: hidden;
+  color: var(--cream);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-identity span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .runs-header {
@@ -1702,6 +1791,11 @@ button {
   gap: 12px;
 }
 
+.profile-form {
+  display: grid;
+  gap: 13px;
+}
+
 .post-run-form input,
 .post-run-form select {
   width: 100%;
@@ -1716,6 +1810,92 @@ button {
   font-size: 1rem;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.input-wrap.readonly {
+  background: rgba(243, 235, 217, 0.035);
+}
+
+.input-wrap.readonly input {
+  color: var(--muted);
+}
+
+.input-suffix {
+  color: var(--dim);
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pace-range-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.pace-range-fields .input-wrap {
+  min-width: 0;
+}
+
+.pace-range-divider {
+  color: var(--dim);
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.profile-choice-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-choice-group legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.profile-actions {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.logout-cta {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(232, 156, 156, 0.34);
+  border-radius: 12px;
+  background: rgba(232, 156, 156, 0.08);
+  color: var(--rose);
+  padding: 13px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.profile-notice {
+  margin: -2px 0 0;
+  color: var(--rose);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.profile-notice.success {
+  color: var(--sun);
 }
 
 .post-run-form select option {
@@ -1821,7 +2001,8 @@ button {
   }
 
   .runs-panel,
-  .post-run-panel {
+  .post-run-panel,
+  .profile-panel {
     padding-top: 28px;
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 144px);
   }

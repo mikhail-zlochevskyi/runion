@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, Mail, MapPin, Plus, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, LogOut, Mail, MapPin, Plus, Save, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
@@ -105,7 +105,7 @@ const availabilityOptions: { value: RunAvailability; label: string }[] = [
 
 const groupSizes: { value: PreferredGroupSize; label: string; recommended?: boolean }[] = [
   { value: "one_to_one", label: "1:1" },
-  { value: "two_to_three", label: "2-3 recommended", recommended: true },
+  { value: "two_to_three", label: "2-3", recommended: true },
   { value: "four_plus", label: "4+" }
 ];
 
@@ -113,6 +113,8 @@ const defaultDraft: OnboardingDraft = {
   name: "",
   runner_type: "consistent",
   comfortable_pace_seconds_per_km: 315,
+  comfortable_pace_min_seconds_per_km: 300,
+  comfortable_pace_max_seconds_per_km: 330,
   run_intents: ["consistency"],
   availability: ["morning"],
   preferred_group_size: "two_to_three",
@@ -211,6 +213,12 @@ export function RunionMobileApp({ initialCity }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
+  useEffect(() => {
+    if (appState === "auth" && pathname === "/profile") {
+      router.replace("/auth/login");
+    }
+  }, [appState, pathname, router]);
+
   async function loadProfile(userId: string, userEmail?: string, authProfile?: { name?: string; photoUrl?: string }) {
     if (!supabase) return;
 
@@ -220,13 +228,19 @@ export function RunionMobileApp({ initialCity }: Props) {
         name: data.name ?? authProfile?.name ?? "",
         runner_type: data.runner_type ?? defaultDraft.runner_type,
         comfortable_pace_seconds_per_km: data.comfortable_pace_seconds_per_km ?? defaultDraft.comfortable_pace_seconds_per_km,
+        comfortable_pace_min_seconds_per_km:
+          data.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(data.comfortable_pace_seconds_per_km ?? defaultDraft.comfortable_pace_seconds_per_km).min,
+        comfortable_pace_max_seconds_per_km:
+          data.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(data.comfortable_pace_seconds_per_km ?? defaultDraft.comfortable_pace_seconds_per_km).max,
         run_intents: data.run_intents?.length ? data.run_intents : defaultDraft.run_intents,
         availability: data.availability?.length ? data.availability : defaultDraft.availability,
         preferred_group_size: data.preferred_group_size ?? defaultDraft.preferred_group_size,
         instagram: data.instagram ?? "",
         profile_photo_url: data.avatar_url ?? data.profile_photo_url ?? authProfile?.photoUrl ?? ""
       });
-      if (data.onboarding_completed) {
+      if (pathname === "/profile") {
+        setAppState("runs");
+      } else if (data.onboarding_completed) {
         setAppState("runs");
         if (pathname === "/") router.replace(`/map#${city}`);
       } else {
@@ -240,7 +254,80 @@ export function RunionMobileApp({ initialCity }: Props) {
       name: current.name || authProfile?.name || userEmail?.split("@")[0] || "",
       profile_photo_url: current.profile_photo_url || authProfile?.photoUrl || ""
     }));
-    setAppState("onboarding");
+    setAppState(pathname === "/profile" ? "runs" : "onboarding");
+  }
+
+  async function saveProfileChanges(profile: OnboardingDraft) {
+    const cleanedInstagram = profile.instagram?.replace(/^@/, "").trim();
+    const paceRange = normalizePaceRange(profile);
+    const nextProfile: RunnerProfile = {
+      ...profile,
+      id: profileId,
+      email: profileEmail,
+      name: profile.name.trim() || "Runner",
+      instagram: cleanedInstagram,
+      comfortable_pace_seconds_per_km: paceRange.center,
+      comfortable_pace_min_seconds_per_km: paceRange.min,
+      comfortable_pace_max_seconds_per_km: paceRange.max,
+      onboarding_completed: true
+    };
+
+    if (!supabase || profileId === "preview-user") {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextProfile));
+      setDraft(nextProfile);
+      return { ok: true, message: "" };
+    }
+
+    if (!profileId) return { ok: false, message: "Sign in again to save your profile." };
+
+    const payload = {
+      id: profileId,
+      email: profileEmail,
+      name: nextProfile.name,
+      runner_type: nextProfile.runner_type,
+      comfortable_pace_seconds_per_km: nextProfile.comfortable_pace_seconds_per_km,
+      comfortable_pace_min_seconds_per_km: nextProfile.comfortable_pace_min_seconds_per_km,
+      comfortable_pace_max_seconds_per_km: nextProfile.comfortable_pace_max_seconds_per_km,
+      run_intents: nextProfile.run_intents,
+      availability: nextProfile.availability,
+      preferred_group_size: nextProfile.preferred_group_size,
+      instagram: nextProfile.instagram,
+      avatar_url: nextProfile.profile_photo_url || null,
+      onboarding_completed: true
+    };
+
+    const { error } = await supabase.from("users").upsert(payload);
+
+    if (error && isMissingPaceRangeColumnError(error.message)) {
+      const { error: fallbackError } = await supabase.from("users").upsert({
+        ...payload,
+        comfortable_pace_min_seconds_per_km: undefined,
+        comfortable_pace_max_seconds_per_km: undefined
+      });
+
+      if (fallbackError) return { ok: false, message: fallbackError.message };
+      setDraft(nextProfile);
+      return { ok: true, message: "" };
+    }
+
+    if (error) return { ok: false, message: error.message };
+
+    setDraft(nextProfile);
+    return { ok: true, message: "" };
+  }
+
+  async function signOut() {
+    if (supabase && profileId !== "preview-user") {
+      await supabase.auth.signOut();
+    } else {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+
+    setProfileId(undefined);
+    setProfileEmail(undefined);
+    setDraft(defaultDraft);
+    setAppState("auth");
+    router.replace("/auth/login");
   }
 
   async function signInWithGoogle() {
@@ -308,6 +395,8 @@ export function RunionMobileApp({ initialCity }: Props) {
       email: profileEmail,
       name: draft.name.trim() || "Runner",
       instagram: cleanedInstagram,
+      comfortable_pace_min_seconds_per_km: draft.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).min,
+      comfortable_pace_max_seconds_per_km: draft.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).max,
       onboarding_completed: true
     };
 
@@ -457,6 +546,23 @@ export function RunionMobileApp({ initialCity }: Props) {
           window.localStorage.setItem(LIVE_TOAST_KEY, "1");
           router.push(`/runs#${city}`);
         }}
+        onProfile={() => router.push(`/profile#${city}`)}
+      />
+    );
+  }
+
+  if (pathname === "/profile") {
+    return (
+      <ProfileScreen
+        profile={draft}
+        email={profileEmail}
+        onProfileChange={setDraft}
+        onBack={() => router.push(`/runs#${city}`)}
+        onMap={() => router.push(`/map#${city}`)}
+        onPostRun={() => router.push(`/post-run#${city}`)}
+        onRuns={() => router.push(`/runs#${city}`)}
+        onSave={saveProfileChanges}
+        onSignOut={signOut}
       />
     );
   }
@@ -473,6 +579,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         onTuneProfile={() => setAppState("onboarding")}
         onPostRun={() => router.push(`/post-run#${city}`)}
         onShowRuns={() => router.push(`/runs#${city}`)}
+        onProfile={() => router.push(`/profile#${city}`)}
       />
     );
   }
@@ -485,6 +592,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       supabase={supabase}
       onOpenMap={() => router.push(`/map#${city}`)}
       onPostRun={() => router.push(`/post-run#${city}`)}
+      onProfile={() => router.push(`/profile#${city}`)}
     />
   );
 }
@@ -511,19 +619,62 @@ function OnboardingStep({
   }
 
   if (step === 1) {
+    const paceRange = normalizePaceRange(draft);
+
     return (
       <div className="step-card">
-        <Question title="What's your comfortable pace?" detail="Use the pace you could hold while still talking." />
-        <div className="pace-readout">{formatPace(draft.comfortable_pace_seconds_per_km)}/km</div>
-        <input
-          className="pace-slider"
-          type="range"
-          min={270}
-          max={420}
-          step={15}
-          value={draft.comfortable_pace_seconds_per_km}
-          onChange={(event) => setDraft((current) => ({ ...current, comfortable_pace_seconds_per_km: Number(event.target.value) }))}
-        />
+        <Question title="What's your comfortable pace range?" detail="Use the easy range you could hold while still talking." />
+        <div className="pace-readout">{formatPace(paceRange.min)}-{formatPace(paceRange.max)}/km</div>
+        <div className="onboarding-pace-range">
+          <label>
+            <span>Min</span>
+            <input
+              className="pace-slider"
+              type="range"
+              min={270}
+              max={420}
+              step={15}
+              value={paceRange.min}
+              onChange={(event) =>
+                setDraft((current) => {
+                  const currentRange = normalizePaceRange(current);
+                  const min = Number(event.target.value);
+                  const max = Math.max(min, currentRange.max);
+                  return {
+                    ...current,
+                    comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                    comfortable_pace_min_seconds_per_km: min,
+                    comfortable_pace_max_seconds_per_km: max
+                  };
+                })
+              }
+            />
+          </label>
+          <label>
+            <span>Max</span>
+            <input
+              className="pace-slider"
+              type="range"
+              min={270}
+              max={420}
+              step={15}
+              value={paceRange.max}
+              onChange={(event) =>
+                setDraft((current) => {
+                  const currentRange = normalizePaceRange(current);
+                  const max = Number(event.target.value);
+                  const min = Math.min(currentRange.min, max);
+                  return {
+                    ...current,
+                    comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                    comfortable_pace_min_seconds_per_km: min,
+                    comfortable_pace_max_seconds_per_km: max
+                  };
+                })
+              }
+            />
+          </label>
+        </div>
         <div className="slider-labels">
           <span>4:30</span>
           <span>7:00</span>
@@ -622,6 +773,7 @@ function RunsFeed({
   supabase,
   onOpenMap,
   onPostRun,
+  onProfile,
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
@@ -629,6 +781,7 @@ function RunsFeed({
   supabase: ReturnType<typeof createClient>;
   onOpenMap: () => void;
   onPostRun: () => void;
+  onProfile: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
@@ -677,7 +830,7 @@ function RunsFeed({
 
   return (
     <main className="app-shell matches-shell runs-shell">
-      <BrandBar />
+      <BrandBar onProfile={onProfile} />
       <section className="runs-panel" aria-label="Your runs">
         <header className="runs-header">
           <p className="modal-eyebrow">Your runs</p>
@@ -730,6 +883,241 @@ function RunsFeed({
       </section>
       <RunionTabNav active="runs" onMap={onOpenMap} onPost={onPostRun} onRuns={() => undefined} />
     </main>
+  );
+}
+
+function ProfileScreen({
+  profile,
+  email,
+  onProfileChange,
+  onBack,
+  onMap,
+  onPostRun,
+  onRuns,
+  onSave,
+  onSignOut
+}: {
+  profile: OnboardingDraft;
+  email?: string;
+  onProfileChange: Dispatch<SetStateAction<OnboardingDraft>>;
+  onBack: () => void;
+  onMap: () => void;
+  onPostRun: () => void;
+  onRuns: () => void;
+  onSave: (profile: OnboardingDraft) => Promise<{ ok: boolean; message: string }>;
+  onSignOut: () => Promise<void>;
+}) {
+  const [localProfile, setLocalProfile] = useState<OnboardingDraft>(() => ({
+    ...defaultDraft,
+    ...profile,
+    run_intents: profile.run_intents?.length ? profile.run_intents : defaultDraft.run_intents,
+    availability: profile.availability?.length ? profile.availability : defaultDraft.availability
+  }));
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setLocalProfile({
+      ...defaultDraft,
+      ...profile,
+      run_intents: profile.run_intents?.length ? profile.run_intents : defaultDraft.run_intents,
+      availability: profile.availability?.length ? profile.availability : defaultDraft.availability
+    });
+  }, [profile]);
+
+  async function submitProfile() {
+    setBusy(true);
+    setNotice("");
+    const paceRange = normalizePaceRange(localProfile);
+    const nextProfile = {
+      ...localProfile,
+      name: localProfile.name.trim(),
+      instagram: localProfile.instagram?.replace(/^@/, "").trim(),
+      comfortable_pace_seconds_per_km: paceRange.center,
+      comfortable_pace_min_seconds_per_km: paceRange.min,
+      comfortable_pace_max_seconds_per_km: paceRange.max
+    };
+    const result = await onSave(nextProfile);
+    setBusy(false);
+
+    if (!result.ok) {
+      setNotice(result.message || "Could not save profile. Try again.");
+      return;
+    }
+
+    onProfileChange(nextProfile);
+    setNotice("Profile updated");
+  }
+
+  return (
+    <main className="app-shell matches-shell runs-shell profile-shell">
+      <BrandBar />
+      <section className="profile-panel" aria-label="Profile">
+        <button className="round-btn" onClick={onBack} aria-label="Back to runs">
+          <ArrowLeft size={17} />
+        </button>
+        <header className="runs-header profile-header">
+          <p className="modal-eyebrow">RUNION</p>
+          <h1>Profile</h1>
+          <p>Keep your running preferences up to date.</p>
+        </header>
+
+        <section className="profile-identity" aria-label="Profile identity">
+          <div className="profile-picture" aria-hidden="true">
+            {localProfile.profile_photo_url ? (
+              // Google OAuth avatars come from the identity provider; keep this direct until uploads exist.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={localProfile.profile_photo_url} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span>{initialsFromName(localProfile.name || email || "Runner")}</span>
+            )}
+          </div>
+          <div>
+            <strong>{localProfile.name || "Runner"}</strong>
+            <span>{localProfile.profile_photo_url ? "Photo from Google account" : "No profile photo yet"}</span>
+          </div>
+        </section>
+
+        <div className="profile-form">
+          <label className="field-label">
+            Name
+            <span className="input-wrap">
+              <UserRound size={16} />
+              <input value={localProfile.name} onChange={(event) => setLocalProfile((current) => ({ ...current, name: event.target.value }))} placeholder="Your name" />
+            </span>
+          </label>
+
+          <label className="field-label">
+            Email
+            <span className="input-wrap readonly">
+              <Mail size={16} />
+              <input value={email ?? ""} readOnly placeholder="you@email.com" />
+            </span>
+          </label>
+
+          <label className="field-label">
+            Instagram optional
+            <span className="input-wrap">
+              <span className="at-symbol">@</span>
+              <input value={localProfile.instagram ?? ""} onChange={(event) => setLocalProfile((current) => ({ ...current, instagram: event.target.value }))} placeholder="handle" />
+            </span>
+          </label>
+
+          <label className="field-label">
+            Comfortable pace range
+            <div className="pace-range-fields">
+              <span className="input-wrap">
+                <CalendarClock size={16} />
+                <input
+                  aria-label="Minimum comfortable pace"
+                  value={formatPace(localProfile.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(localProfile.comfortable_pace_seconds_per_km).min)}
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    setLocalProfile((current) => {
+                      const currentRange = normalizePaceRange(current);
+                      const min = parsePaceInput(event.target.value, currentRange.min);
+                      const max = Math.max(min, currentRange.max);
+                      return {
+                        ...current,
+                        comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                        comfortable_pace_min_seconds_per_km: min,
+                        comfortable_pace_max_seconds_per_km: max
+                      };
+                    })
+                  }
+                  placeholder="5:00"
+                />
+                <span className="input-suffix">min</span>
+              </span>
+              <span className="pace-range-divider">to</span>
+              <span className="input-wrap">
+                <input
+                  aria-label="Maximum comfortable pace"
+                  value={formatPace(localProfile.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(localProfile.comfortable_pace_seconds_per_km).max)}
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    setLocalProfile((current) => {
+                      const currentRange = normalizePaceRange(current);
+                      const max = parsePaceInput(event.target.value, currentRange.max);
+                      const min = Math.min(currentRange.min, max);
+                      return {
+                        ...current,
+                        comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                        comfortable_pace_min_seconds_per_km: min,
+                        comfortable_pace_max_seconds_per_km: max
+                      };
+                    })
+                  }
+                  placeholder="5:30"
+                />
+                <span className="input-suffix">/km</span>
+              </span>
+            </div>
+          </label>
+
+          <ProfileChoiceGroup title="Runner type">
+            <OptionStack
+              options={runnerTypes.map((item) => ({ value: item.value, label: item.label, active: localProfile.runner_type === item.value }))}
+              onSelect={(value) => setLocalProfile((current) => ({ ...current, runner_type: value as RunnerType }))}
+            />
+          </ProfileChoiceGroup>
+
+          <ProfileChoiceGroup title="Intent">
+            <OptionStack
+              options={intents.map((item) => ({ value: item.value, label: item.label, active: localProfile.run_intents.includes(item.value) }))}
+              onSelect={(value) =>
+                setLocalProfile((current) => ({
+                  ...current,
+                  run_intents: toggleValue(current.run_intents, value as RunIntent)
+                }))
+              }
+            />
+          </ProfileChoiceGroup>
+
+          <ProfileChoiceGroup title="Availability">
+            <OptionStack
+              options={availabilityOptions.map((item) => ({ value: item.value, label: item.label, active: localProfile.availability.includes(item.value) }))}
+              onSelect={(value) =>
+                setLocalProfile((current) => ({
+                  ...current,
+                  availability: toggleValue(current.availability, value as RunAvailability)
+                }))
+              }
+            />
+          </ProfileChoiceGroup>
+
+          <ProfileChoiceGroup title="Preferred group size">
+            <OptionStack
+              options={groupSizes.map((item) => ({ value: item.value, label: item.label, active: localProfile.preferred_group_size === item.value }))}
+              onSelect={(value) => setLocalProfile((current) => ({ ...current, preferred_group_size: value as PreferredGroupSize }))}
+            />
+          </ProfileChoiceGroup>
+        </div>
+
+        {notice ? <p className={`profile-notice${notice === "Profile updated" ? " success" : ""}`}>{notice}</p> : null}
+
+        <div className="profile-actions">
+          <button className="primary-cta" onClick={submitProfile} disabled={busy}>
+            <Save size={17} />
+            {busy ? "Saving..." : "Save changes"}
+          </button>
+          <button className="logout-cta" onClick={onSignOut}>
+            <LogOut size={17} />
+            Log out
+          </button>
+        </div>
+      </section>
+      <RunionTabNav active="runs" onMap={onMap} onPost={onPostRun} onRuns={onRuns} />
+    </main>
+  );
+}
+
+function ProfileChoiceGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <fieldset className="profile-choice-group">
+      <legend>{title}</legend>
+      {children}
+    </fieldset>
   );
 }
 
@@ -875,7 +1263,8 @@ function PostRunScreen({
   supabase,
   onBack,
   onMap,
-  onPosted
+  onPosted,
+  onProfile
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
@@ -884,6 +1273,7 @@ function PostRunScreen({
   onBack: () => void;
   onMap: () => void;
   onPosted: () => void;
+  onProfile: () => void;
 }) {
   const [draft, setDraft] = useState<PostRunDraft>(() => ({
     startTime: defaultStartTime(),
@@ -914,7 +1304,7 @@ function PostRunScreen({
 
   return (
     <main className="app-shell matches-shell runs-shell">
-      <BrandBar />
+      <BrandBar onProfile={onProfile} />
       <section className="post-run-panel" aria-label="Post a run">
         <button className="round-btn" onClick={onBack} aria-label="Back to runs">
           <ArrowLeft size={17} />
@@ -999,7 +1389,8 @@ function MatchedRunsMap({
   onRequest,
   onTuneProfile,
   onPostRun,
-  onShowRuns
+  onShowRuns,
+  onProfile
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
@@ -1010,6 +1401,7 @@ function MatchedRunsMap({
   onTuneProfile: () => void;
   onPostRun: () => void;
   onShowRuns: () => void;
+  onProfile: () => void;
 }) {
   const runs = useMemo(() => getSeedRuns(city), [city]);
   const cityConf = CITY_CONFIG[city];
@@ -1243,14 +1635,19 @@ function MatchedRunsMap({
           <LogoMark />
           runi<span>o</span>n
         </div>
-        <button
-          className={`icon-btn ${locationStatus === "locating" ? "loading" : ""} ${locationStatus === "found" ? "found" : ""}`}
-          aria-label="Find my location"
-          onClick={findMyLocation}
-          disabled={locationStatus === "locating"}
-        >
-          <LocateFixed size={17} />
-        </button>
+        <div className="topbar-actions">
+          <button
+            className={`icon-btn ${locationStatus === "locating" ? "loading" : ""} ${locationStatus === "found" ? "found" : ""}`}
+            aria-label="Find my location"
+            onClick={findMyLocation}
+            disabled={locationStatus === "locating"}
+          >
+            <LocateFixed size={17} />
+          </button>
+          <button className="icon-btn profile-icon-btn" aria-label="Open profile" onClick={onProfile}>
+            <UserRound size={17} />
+          </button>
+        </div>
       </div>
 
       {locationStatus !== "idle" ? <div className={`location-toast ${locationStatus}`}>{locationStatusLabel(locationStatus)}</div> : null}
@@ -1420,13 +1817,18 @@ function locationStatusLabel(status: LocationStatus) {
   return labels[status];
 }
 
-function BrandBar() {
+function BrandBar({ onProfile }: { onProfile?: () => void }) {
   return (
     <div className="topbar">
       <div className="logo" aria-label="runion">
         <LogoMark />
         runi<span>o</span>n
       </div>
+      {onProfile ? (
+        <button className="icon-btn profile-icon-btn" aria-label="Open profile" onClick={onProfile}>
+          <UserRound size={17} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1868,7 +2270,7 @@ function toDatetimeLocal(date: Date) {
 
 function parsePaceInput(value: string, fallback: number) {
   const parsed = secondsFromPace(value);
-  return parsed || fallback;
+  return parsed ? clampPace(parsed) : fallback;
 }
 
 function secondsFromPace(value: string) {
@@ -1914,6 +2316,45 @@ function formatPace(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = String(seconds % 60).padStart(2, "0");
   return `${minutes}:${remainder}`;
+}
+
+function clampPace(seconds: number) {
+  return Math.min(420, Math.max(270, seconds));
+}
+
+function paceRangeFromCenter(seconds: number) {
+  const center = clampPace(seconds);
+  return {
+    min: clampPace(center - 15),
+    max: clampPace(center + 15)
+  };
+}
+
+function normalizePaceRange(profile: Pick<RunnerProfile, "comfortable_pace_seconds_per_km" | "comfortable_pace_min_seconds_per_km" | "comfortable_pace_max_seconds_per_km">) {
+  const fallback = paceRangeFromCenter(profile.comfortable_pace_seconds_per_km);
+  const rawMin = clampPace(profile.comfortable_pace_min_seconds_per_km ?? fallback.min);
+  const rawMax = clampPace(profile.comfortable_pace_max_seconds_per_km ?? fallback.max);
+  const min = Math.min(rawMin, rawMax);
+  const max = Math.max(rawMin, rawMax);
+
+  return {
+    min,
+    max,
+    center: Math.round((min + max) / 2)
+  };
+}
+
+function isMissingPaceRangeColumnError(message: string) {
+  return message.includes("comfortable_pace_min_seconds_per_km") || message.includes("comfortable_pace_max_seconds_per_km");
+}
+
+function initialsFromName(value: string) {
+  return value
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 function readPreviewProfile(): RunnerProfile | null {

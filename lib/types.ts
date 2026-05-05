@@ -69,6 +69,8 @@ export type RunnerProfile = {
   name: string;
   runner_type: RunnerType;
   comfortable_pace_seconds_per_km: number;
+  comfortable_pace_min_seconds_per_km?: number;
+  comfortable_pace_max_seconds_per_km?: number;
   run_intents: RunIntent[];
   availability: RunAvailability[];
   preferred_group_size: PreferredGroupSize;
