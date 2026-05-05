@@ -73,10 +73,16 @@ const LOCAL_PARTICIPANTS_KEY = "runion.local.participants";
 const LIVE_TOAST_KEY = "runion.run.live";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
-  tempo: "tempo",
-  social: "social",
-  consistency: "consistency"
+  tempo: "TEMPO",
+  social: "SOCIAL",
+  consistency: "CONSISTENCY"
 };
+
+const postRunIntentChoices: { value: CoreIntent; headline: string; detail: string }[] = [
+  { value: "tempo", headline: "TEMPO", detail: "Quality work — harder pace or intervals." },
+  { value: "social", headline: "SOCIAL", detail: "Easy miles and conversation." },
+  { value: "consistency", headline: "CONSISTENCY", detail: "Steady habit — show up, lock it in." }
+];
 
 const runnerTypes: { value: RunnerType; label: string; detail: string }[] = [
   { value: "consistent", label: "Consistent", detail: "2-4x/week" },
@@ -222,7 +228,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       });
       if (data.onboarding_completed) {
         setAppState("runs");
-        if (pathname === "/") router.replace(`/runs#${city}`);
+        if (pathname === "/") router.replace(`/map#${city}`);
       } else {
         setAppState("onboarding");
       }
@@ -309,7 +315,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
       setDraft(profile);
       setAppState("runs");
-      router.replace(`/runs#${city}`);
+      router.replace(`/map#${city}`);
       return;
     }
 
@@ -334,7 +340,7 @@ export function RunionMobileApp({ initialCity }: Props) {
 
     setDraft(profile);
     setAppState("runs");
-    router.replace(`/runs#${city}`);
+    router.replace(`/map#${city}`);
   }
 
   function requestSpot(runId: string) {
@@ -438,33 +444,48 @@ export function RunionMobileApp({ initialCity }: Props) {
     );
   }
 
-  return (
-    pathname === "/post-run" ? (
+  if (pathname === "/post-run") {
+    return (
       <PostRunScreen
         city={city}
         profile={draft}
         profileId={profileId}
         supabase={supabase}
         onBack={() => router.push(`/runs#${city}`)}
-        onMap={() => router.push(`/runs?tab=map#${city}`)}
+        onMap={() => router.push(`/map#${city}`)}
         onPosted={() => {
           window.localStorage.setItem(LIVE_TOAST_KEY, "1");
           router.push(`/runs#${city}`);
         }}
       />
-    ) : (
-      <RunsFeed
+    );
+  }
+
+  if (pathname === "/map") {
+    return (
+      <MatchedRunsMap
+        city={city}
+        profile={draft}
+        profileId={profileId}
+        supabase={supabase}
+        requestedRunId={requestedRunId}
+        onRequest={requestSpot}
+        onTuneProfile={() => setAppState("onboarding")}
+        onPostRun={() => router.push(`/post-run#${city}`)}
+        onShowRuns={() => router.push(`/runs#${city}`)}
+      />
+    );
+  }
+
+  return (
+    <RunsFeed
       city={city}
       profile={draft}
       profileId={profileId}
       supabase={supabase}
-      requestedRunId={requestedRunId}
-      onRequest={requestSpot}
-      onRequestRun={requestSpot}
+      onOpenMap={() => router.push(`/map#${city}`)}
       onPostRun={() => router.push(`/post-run#${city}`)}
-      onTuneProfile={() => setAppState("onboarding")}
     />
-    )
   );
 }
 
@@ -599,23 +620,16 @@ function RunsFeed({
   profile,
   profileId,
   supabase,
-  requestedRunId,
-  onRequest,
-  onRequestRun,
+  onOpenMap,
   onPostRun,
-  onTuneProfile
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
   profileId?: string;
   supabase: ReturnType<typeof createClient>;
-  requestedRunId: string;
-  onRequest: (runId: string) => void;
-  onRequestRun: (runId: string) => void;
+  onOpenMap: () => void;
   onPostRun: () => void;
-  onTuneProfile: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<RunsTab>("runs");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
   const [activity, setActivity] = useState<{ pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] }>({
@@ -623,11 +637,6 @@ function RunsFeed({
     confirmed: [],
     hosted: []
   });
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setActiveTab(params.get("tab") === "map" ? "map" : "runs");
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -664,25 +673,6 @@ function RunsFeed({
     } else {
       setToast("Could not update this request. Try again.");
     }
-  }
-
-  if (activeTab === "map") {
-    return (
-      <MatchedRunsMap
-        city={city}
-        profile={profile}
-        profileId={profileId}
-        supabase={supabase}
-        requestedRunId={requestedRunId}
-        onRequest={(runId) => {
-          onRequestRun(runId);
-          refreshLocalActivity("Spot requested. Track it in Runs.");
-        }}
-        onTuneProfile={onTuneProfile}
-        onPostRun={onPostRun}
-        onShowRuns={() => setActiveTab("runs")}
-      />
-    );
   }
 
   return (
@@ -732,13 +722,13 @@ function RunsFeed({
             <h2>No runs yet</h2>
             <p>Find a run on the map or post your own.</p>
             <div className="empty-actions">
-              <button className="primary-cta" onClick={() => setActiveTab("map")}>Open map</button>
+              <button className="primary-cta" onClick={onOpenMap}>Open map</button>
               <button className="secondary-cta" onClick={onPostRun}>Post a run</button>
             </div>
           </section>
         )}
       </section>
-      <RunionTabNav active="runs" onMap={() => setActiveTab("map")} onPost={onPostRun} onRuns={() => setActiveTab("runs")} />
+      <RunionTabNav active="runs" onMap={onOpenMap} onPost={onPostRun} onRuns={() => undefined} />
     </main>
   );
 }
@@ -849,7 +839,7 @@ function HostedRunCard({
               <div>
                 <strong>{request.requesterName}</strong>
                 <span>
-                  {request.requesterPace ? `${formatPace(request.requesterPace)}/km` : "Pace not shared"} · {request.requesterIntent ?? "social"}
+                  {request.requesterPace ? `${formatPace(request.requesterPace)}/km` : "Pace not shared"} · {intentLabels[request.requesterIntent ?? "social"]}
                 </span>
               </div>
               <div className="request-actions">
@@ -959,14 +949,30 @@ function PostRunScreen({
               onChange={(event) => setDraft((current) => ({ ...current, distanceKm: Number(event.target.value) }))}
             />
           </label>
-          <label className="field-label">
-            Intent
-            <select value={draft.intent} onChange={(event) => setDraft((current) => ({ ...current, intent: event.target.value as CoreIntent }))}>
-              <option value="tempo">tempo</option>
-              <option value="social">social</option>
-              <option value="consistency">consistency</option>
-            </select>
-          </label>
+          <div className="post-run-intent-field">
+            <div className="post-run-intent-heading">
+              <span>Intent</span>
+              <p className="post-run-intent-lede">Pick what you&apos;re offering so the right runners tap in.</p>
+            </div>
+            <div className="post-run-intents" role="radiogroup" aria-label="Run intent">
+              {postRunIntentChoices.map((choice) => {
+                const selected = draft.intent === choice.value;
+                return (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    className={`intent-pick${selected ? " intent-pick--active" : ""}`}
+                    onClick={() => setDraft((current) => ({ ...current, intent: choice.value }))}
+                  >
+                    <span className="intent-pick-headline">{choice.headline}</span>
+                    <span className="intent-pick-detail">{choice.detail}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="field-label">
             Location
             <input value={draft.locationName} onChange={(event) => setDraft((current) => ({ ...current, locationName: event.target.value }))} placeholder="Ciutadella Park" />
@@ -976,7 +982,7 @@ function PostRunScreen({
         {error ? <p className="auth-notice">{error}</p> : null}
 
         <button className="primary-cta sticky-cta" onClick={submitRun} disabled={busy}>
-          {busy ? "Posting..." : "Post run"}
+          {busy ? "Pushing…" : "PUSH"}
         </button>
       </section>
       <RunionTabNav active="post" onMap={onMap} onPost={() => undefined} onRuns={onBack} />
@@ -1012,6 +1018,7 @@ function MatchedRunsMap({
   const [dragY, setDragY] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number]>(cityConf.youLL);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [mapNotice, setMapNotice] = useState("");
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLElement | null>(null);
@@ -1116,7 +1123,10 @@ function MatchedRunsMap({
 
     const coreRun = seedRunToCoreRun(run, city);
     const ok = await insertParticipant(supabase, coreRun, profileId, profile);
-    if (ok) onRequest(run.id);
+    if (ok) {
+      onRequest(run.id);
+      setMapNotice("Spot requested. Track it in Runs.");
+    }
   }
 
   function findMyLocation() {
@@ -1244,6 +1254,7 @@ function MatchedRunsMap({
       </div>
 
       {locationStatus !== "idle" ? <div className={`location-toast ${locationStatus}`}>{locationStatusLabel(locationStatus)}</div> : null}
+      {mapNotice ? <div className="location-toast found">{mapNotice}</div> : null}
 
       <div ref={mapRef} id="map" />
 

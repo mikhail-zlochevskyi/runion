@@ -655,12 +655,15 @@ button {
 }
 
 .bottom-nav {
-  position: absolute;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   left: 50%;
-  z-index: 50;
+  z-index: 500;
+  display: flex;
   gap: 4px;
-  padding: 6px 8px;
+  width: min(300px, calc(100vw - 32px));
+  min-height: 62px;
+  padding: 6px;
   transform: translateX(-50%);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -671,15 +674,17 @@ button {
 
 .bottom-nav button {
   display: flex;
-  min-width: 64px;
+  min-width: 0;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  padding: 8px 18px;
+  padding: 8px 10px;
   font-family: var(--font-dm-mono), monospace;
   font-size: 0.6rem;
   letter-spacing: 0.1em;
@@ -1175,6 +1180,7 @@ button {
 
 .sticky-cta {
   align-self: end;
+  margin-top: 4px;
 }
 
 .matches-panel {
@@ -1256,7 +1262,7 @@ button {
 
 .matched-sheet.full {
   max-height: 72vh;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
 }
 
 .matched-sheet.peek {
@@ -1264,7 +1270,7 @@ button {
 }
 
 .matched-run-list {
-  padding-bottom: 120px;
+  padding-bottom: 136px;
 }
 
 .matched-map-card {
@@ -1300,7 +1306,7 @@ button {
 .active-run-bar {
   position: absolute;
   right: 14px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
   left: 14px;
   display: flex;
   align-items: center;
@@ -1330,7 +1336,7 @@ button {
 .post-run-panel {
   width: min(100%, 520px);
   margin: 0 auto;
-  padding: 18px 18px calc(env(safe-area-inset-bottom, 0px) + 104px);
+  padding: 18px 18px calc(env(safe-area-inset-bottom, 0px) + 136px);
 }
 
 .runs-panel {
@@ -1341,7 +1347,8 @@ button {
 .post-run-panel {
   display: grid;
   min-height: calc(100dvh - 84px);
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto auto auto auto;
+  align-content: start;
   gap: 16px;
 }
 
@@ -1715,8 +1722,93 @@ button {
   color: var(--espresso-deep);
 }
 
+.post-run-intent-field {
+  display: grid;
+  gap: 10px;
+}
+
+.post-run-intent-heading span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.post-run-intent-lede {
+  margin: 4px 0 0;
+  color: var(--dim);
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.post-run-intents {
+  display: grid;
+  gap: 8px;
+}
+
+.post-run-intents .intent-pick {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+  text-align: left;
+  width: 100%;
+  min-height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.06);
+  color: inherit;
+  padding: 13px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.post-run-intents .intent-pick:focus-visible {
+  outline: 2px solid var(--sun);
+  outline-offset: 2px;
+}
+
+.post-run-intents .intent-pick--active {
+  border-color: var(--sun);
+  background: rgba(236, 120, 40, 0.12);
+  box-shadow: 0 0 0 1px rgba(236, 120, 40, 0.25);
+}
+
+.intent-pick-headline {
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  color: var(--cream);
+}
+
+.intent-pick-detail {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.post-run-intents .intent-pick--active .intent-pick-detail {
+  color: var(--dim);
+}
+
 .runion-tabs {
   display: flex;
+  isolation: isolate;
+}
+
+.runion-tabs svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
 }
 
 .runion-tabs button:disabled {
@@ -1731,6 +1823,7 @@ button {
   .runs-panel,
   .post-run-panel {
     padding-top: 28px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 144px);
   }
 
   .runs-header h1 {
