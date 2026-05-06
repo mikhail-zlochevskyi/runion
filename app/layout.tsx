@@ -26,7 +26,10 @@ export const metadata: Metadata = {
   description: "Find 2-3 runners at your pace. No random groups.",
   applicationName: "runion",
   icons: {
-    icon: [{ url: "/runion-icon.svg", type: "image/svg+xml" }]
+    icon: [
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" }
+    ]
   },
   openGraph: {
     title: "runion · matched runs at your pace",
