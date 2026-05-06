@@ -1444,17 +1444,9 @@ button {
   font-size: 0.75rem;
 }
 
-.required-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(244, 164, 92, 0.18);
-  color: var(--sun);
-  font-size: 0.6rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.input-wrap--incomplete {
+  border-color: rgba(244, 164, 92, 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);
 }
 
 .requester-socials {

@@ -55,9 +55,17 @@ export type RunFormInput = {
   clubName?: string;
 };
 
-export type RunnerType = "consistent" | "race_training" | "returning";
+export type RunnerType = "performance_focused" | "explorer" | "social_connector";
 
-export type RunIntent = "consistency" | "performance" | "like_minded" | "easy_social";
+export type RunIntent =
+  | "build_routine"
+  | "find_partners"
+  | "train_event"
+  | "improve_speed"
+  | "increase_distance"
+  | "recover_gently"
+  | "discover_routes"
+  | "stay_accountable";
 
 export type RunAvailability = "morning" | "evening" | "weekends";
 

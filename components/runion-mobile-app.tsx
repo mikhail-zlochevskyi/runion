@@ -118,16 +118,20 @@ const postRunIntentChoices: { value: CoreIntent; headline: string; detail: strin
 ];
 
 const runnerTypes: { value: RunnerType; label: string; detail: string }[] = [
-  { value: "consistent", label: "Consistent", detail: "2-4x/week" },
-  { value: "race_training", label: "Training for a race", detail: "Building toward a goal" },
-  { value: "returning", label: "Getting back into it", detail: "Finding the rhythm again" }
+  { value: "performance_focused", label: "Performance Focused", detail: "Wants sharper sessions, faster pace, improvement" },
+  { value: "explorer", label: "Explorer", detail: "Enjoys new routes, neighborhoods, scenery" },
+  { value: "social_connector", label: "Social Connector", detail: "Runs to meet people and share the miles" }
 ];
 
-const intents: { value: RunIntent; label: string }[] = [
-  { value: "consistency", label: "Stay consistent" },
-  { value: "performance", label: "Improve performance" },
-  { value: "like_minded", label: "Meet like-minded people" },
-  { value: "easy_social", label: "Easy + social runs" }
+const intents: { value: RunIntent; label: string; detail: string }[] = [
+  { value: "build_routine", label: "Build a routine", detail: "Make running a regular habit" },
+  { value: "find_partners", label: "Find running partners", detail: "Meet people to run with regularly" },
+  { value: "train_event", label: "Train for an event", detail: "Prepare for a race or challenge" },
+  { value: "improve_speed", label: "Improve speed", detail: "Get faster or push performance" },
+  { value: "increase_distance", label: "Increase distance", detail: "Work toward longer runs" },
+  { value: "recover_gently", label: "Recover gently", detail: "Ease back in safely" },
+  { value: "discover_routes", label: "Discover routes", detail: "Explore new places to run" },
+  { value: "stay_accountable", label: "Stay accountable", detail: "Use others as motivation to show up" }
 ];
 
 const availabilityOptions: { value: RunAvailability; label: string }[] = [
@@ -152,17 +156,58 @@ const mapRunFilters: { value: MapRunFilter; label: string }[] = [
 
 const defaultDraft: OnboardingDraft = {
   name: "",
-  runner_type: "consistent",
+  runner_type: "social_connector",
   comfortable_pace_seconds_per_km: 315,
   comfortable_pace_min_seconds_per_km: 300,
   comfortable_pace_max_seconds_per_km: 330,
-  run_intents: ["consistency"],
+  run_intents: ["build_routine"],
   availability: ["morning"],
   preferred_group_size: "two_to_three",
   whatsapp: "",
   socials_url: "",
   profile_photo_url: ""
 };
+
+function coerceRunnerType(value?: string | null): RunnerType {
+  if (value === "performance_focused" || value === "explorer" || value === "social_connector") return value;
+  if (value === "race_training") return "performance_focused";
+  return "social_connector";
+}
+
+function coerceRunIntent(value?: string | null): RunIntent | null {
+  if (
+    value === "build_routine" ||
+    value === "find_partners" ||
+    value === "train_event" ||
+    value === "improve_speed" ||
+    value === "increase_distance" ||
+    value === "recover_gently" ||
+    value === "discover_routes" ||
+    value === "stay_accountable"
+  ) {
+    return value;
+  }
+  if (value === "consistency") return "build_routine";
+  if (value === "performance") return "improve_speed";
+  if (value === "like_minded" || value === "easy_social") return "find_partners";
+  return null;
+}
+
+function coerceRunIntents(values?: string[] | null): RunIntent[] {
+  const normalized = (values ?? []).map(coerceRunIntent).filter((value): value is RunIntent => Boolean(value));
+  return Array.from(new Set(normalized)).slice(0, intents.length);
+}
+
+function normalizeProfileDraft(profile: Partial<RunnerProfile>): OnboardingDraft {
+  const runIntents = coerceRunIntents(profile.run_intents as string[] | undefined);
+  return {
+    ...defaultDraft,
+    ...profile,
+    runner_type: coerceRunnerType(profile.runner_type),
+    run_intents: runIntents.length ? runIntents : defaultDraft.run_intents,
+    availability: profile.availability?.length ? profile.availability : defaultDraft.availability
+  };
+}
 
 const matchCopy: Record<string, { title: string; level: string; people: string; tagline: string }> = {
   "sg-1": { title: "Marina Bay waterfront", level: "Easy", people: "Mei + 1 runner", tagline: "Scenic steady" },
@@ -212,7 +257,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       if (!supabase) {
         const previewProfile = readPreviewProfile();
         if (previewProfile?.onboarding_completed) {
-          setDraft({ ...defaultDraft, ...previewProfile });
+          setDraft(normalizeProfileDraft(previewProfile));
           setAppState("runs");
         } else {
           setAppState("auth");
@@ -266,7 +311,7 @@ export function RunionMobileApp({ initialCity }: Props) {
 
     const { data } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
     if (data) {
-      setDraft({
+      setDraft(normalizeProfileDraft({
         name: data.name ?? authProfile?.name ?? "",
         runner_type: data.runner_type ?? defaultDraft.runner_type,
         comfortable_pace_seconds_per_km: data.comfortable_pace_seconds_per_km ?? defaultDraft.comfortable_pace_seconds_per_km,
@@ -280,7 +325,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         whatsapp: data.whatsapp ?? "",
         socials_url: data.socials_url ?? "",
         profile_photo_url: data.avatar_url ?? data.profile_photo_url ?? authProfile?.photoUrl ?? ""
-      });
+      }));
       if (pathname === "/profile") {
         setAppState("runs");
       } else if (data.onboarding_completed) {
@@ -303,13 +348,7 @@ export function RunionMobileApp({ initialCity }: Props) {
   async function saveProfileChanges(profile: OnboardingDraft) {
     const cleanedWhatsapp = normalizeWhatsapp(profile.whatsapp);
     const cleanedSocials = profile.socials_url?.trim() ?? "";
-    if (!cleanedWhatsapp) {
-      return { ok: false, message: "WhatsApp is required." };
-    }
-    if (!cleanedSocials) {
-      return { ok: false, message: "Add a social link (Strava, Instagram, or Garmin)." };
-    }
-    if (!isValidSocialsUrl(cleanedSocials)) {
+    if (cleanedSocials && !isValidSocialsUrl(cleanedSocials)) {
       return { ok: false, message: "Social link must be a Strava, Instagram, or Garmin URL." };
     }
     const paceRange = normalizePaceRange(profile);
@@ -455,15 +494,7 @@ export function RunionMobileApp({ initialCity }: Props) {
   async function completeOnboarding() {
     const cleanedWhatsapp = normalizeWhatsapp(draft.whatsapp);
     const cleanedSocials = draft.socials_url?.trim() ?? "";
-    if (!cleanedWhatsapp) {
-      setAuthNotice("Add your WhatsApp to continue.");
-      return;
-    }
-    if (!cleanedSocials) {
-      setAuthNotice("Add a social link to continue.");
-      return;
-    }
-    if (!isValidSocialsUrl(cleanedSocials)) {
+    if (cleanedSocials && !isValidSocialsUrl(cleanedSocials)) {
       setAuthNotice("Social link must be a Strava, Instagram, or Garmin URL.");
       return;
     }
@@ -780,7 +811,7 @@ function OnboardingStep({
       <div className="step-card">
         <Question title="Why do you want to run with others?" />
         <OptionStack
-          options={intents.map((item) => ({ value: item.value, label: item.label, active: draft.run_intents.includes(item.value) }))}
+          options={intents.map((item) => ({ value: item.value, label: item.label, detail: item.detail, active: draft.run_intents.includes(item.value) }))}
           onSelect={(value) =>
             setDraft((current) => ({
               ...current,
@@ -848,8 +879,8 @@ function OnboardingStep({
         </span>
       </label>
       <label className="field-label">
-        WhatsApp <span className="required-tag">required</span>
-        <span className="input-wrap">
+        WhatsApp
+        <span className={`input-wrap${(draft.whatsapp ?? "").trim() ? "" : " input-wrap--incomplete"}`}>
           <MessageCircle size={16} />
           <input
             value={draft.whatsapp ?? ""}
@@ -861,8 +892,8 @@ function OnboardingStep({
         <span className="privacy-note">{WHATSAPP_PRIVACY_COPY}</span>
       </label>
       <label className="field-label">
-        Socials <span className="required-tag">required</span>
-        <span className="input-wrap">
+        Socials
+        <span className={`input-wrap${(draft.socials_url ?? "").trim() ? "" : " input-wrap--incomplete"}`}>
           <input
             value={draft.socials_url ?? ""}
             onChange={(event) => setDraft((current) => ({ ...current, socials_url: event.target.value }))}
@@ -1065,20 +1096,14 @@ function ProfileScreen({
   onSignOut: () => Promise<void>;
 }) {
   const [localProfile, setLocalProfile] = useState<OnboardingDraft>(() => ({
-    ...defaultDraft,
-    ...profile,
-    run_intents: profile.run_intents?.length ? profile.run_intents : defaultDraft.run_intents,
-    availability: profile.availability?.length ? profile.availability : defaultDraft.availability
+    ...normalizeProfileDraft(profile)
   }));
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setLocalProfile({
-      ...defaultDraft,
-      ...profile,
-      run_intents: profile.run_intents?.length ? profile.run_intents : defaultDraft.run_intents,
-      availability: profile.availability?.length ? profile.availability : defaultDraft.availability
+      ...normalizeProfileDraft(profile)
     });
   }, [profile]);
 
@@ -1154,8 +1179,8 @@ function ProfileScreen({
           </label>
 
           <label className="field-label">
-            WhatsApp <span className="required-tag">required</span>
-            <span className="input-wrap">
+            WhatsApp
+            <span className={`input-wrap${(localProfile.whatsapp ?? "").trim() ? "" : " input-wrap--incomplete"}`}>
               <MessageCircle size={16} />
               <input
                 value={localProfile.whatsapp ?? ""}
@@ -1168,8 +1193,8 @@ function ProfileScreen({
           </label>
 
           <label className="field-label">
-            Socials <span className="required-tag">required</span>
-            <span className="input-wrap">
+            Socials
+            <span className={`input-wrap${(localProfile.socials_url ?? "").trim() ? "" : " input-wrap--incomplete"}`}>
               <input
                 value={localProfile.socials_url ?? ""}
                 onChange={(event) => setLocalProfile((current) => ({ ...current, socials_url: event.target.value }))}
@@ -1241,7 +1266,7 @@ function ProfileScreen({
 
           <ProfileChoiceGroup title="Intent">
             <OptionStack
-              options={intents.map((item) => ({ value: item.value, label: item.label, active: localProfile.run_intents.includes(item.value) }))}
+              options={intents.map((item) => ({ value: item.value, label: item.label, detail: item.detail, active: localProfile.run_intents.includes(item.value) }))}
               onSelect={(value) =>
                 setLocalProfile((current) => ({
                   ...current,
@@ -2275,8 +2300,8 @@ function titleFromIntent(intent: CoreIntent) {
 
 function normalizeIntent(value?: string): CoreIntent {
   const lower = value?.toLowerCase() ?? "";
-  if (lower.includes("tempo") || lower.includes("performance") || lower.includes("hill")) return "tempo";
-  if (lower.includes("consistent") || lower.includes("steady")) return "consistency";
+  if (lower.includes("tempo") || lower.includes("performance") || lower.includes("speed") || lower.includes("event") || lower.includes("hill")) return "tempo";
+  if (lower.includes("routine") || lower.includes("consistent") || lower.includes("steady") || lower.includes("accountable")) return "consistency";
   return "social";
 }
 
@@ -2287,8 +2312,8 @@ function normalizeParticipantStatus(value?: string): ParticipantStatus | null {
 }
 
 function profileIntentToCoreIntent(intent: RunIntent): CoreIntent {
-  if (intent === "performance") return "tempo";
-  if (intent === "consistency") return "consistency";
+  if (intent === "improve_speed" || intent === "train_event") return "tempo";
+  if (intent === "build_routine" || intent === "increase_distance" || intent === "stay_accountable") return "consistency";
   return "social";
 }
 
@@ -2343,7 +2368,7 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
     requesterWhatsapp: p.requesterWhatsapp ?? undefined,
     requesterSocials: p.requesterSocials ?? undefined,
     requesterPace: fallbackProfile.comfortable_pace_seconds_per_km,
-    requesterIntent: profileIntentToCoreIntent(fallbackProfile.run_intents[0] ?? "easy_social"),
+    requesterIntent: profileIntentToCoreIntent(fallbackProfile.run_intents[0] ?? "find_partners"),
     createdAt: p.createdAt,
   };
 }
