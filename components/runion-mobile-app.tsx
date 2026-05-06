@@ -897,7 +897,12 @@ function OnboardingStep({
           <input
             value={draft.socials_url ?? ""}
             onChange={(event) => setDraft((current) => ({ ...current, socials_url: event.target.value }))}
+            type="url"
             inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="url"
+            spellCheck={false}
             placeholder="Paste a Strava, Instagram, or Garmin link"
           />
         </span>
@@ -1198,7 +1203,12 @@ function ProfileScreen({
               <input
                 value={localProfile.socials_url ?? ""}
                 onChange={(event) => setLocalProfile((current) => ({ ...current, socials_url: event.target.value }))}
+                type="url"
                 inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="url"
+                spellCheck={false}
                 placeholder="Paste a Strava, Instagram, or Garmin link"
               />
             </span>
