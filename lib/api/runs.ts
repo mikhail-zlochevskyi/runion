@@ -365,8 +365,8 @@ export type SocialsPlatform = "strava" | "instagram" | "garmin";
 export function detectSocialsPlatform(url: string): SocialsPlatform | null {
   const v = url.trim().toLowerCase();
   if (!v) return null;
-  if (v.includes("strava.com")) return "strava";
-  if (v.includes("instagram.com")) return "instagram";
+  if (v.includes("strava.com") || v.includes("strava.app.link")) return "strava";
+  if (v.includes("instagram.com") || v.includes("instagr.am")) return "instagram";
   if (v.includes("garmin.com")) return "garmin";
   return null;
 }
