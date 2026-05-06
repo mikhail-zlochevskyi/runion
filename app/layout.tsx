@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   title: "runion · matched runs at your pace",
   description: "Find 2-3 runners at your pace. No random groups.",
   applicationName: "runion",
+  icons: {
+    icon: [{ url: "/runion-icon.svg", type: "image/svg+xml" }]
+  },
   openGraph: {
     title: "runion · matched runs at your pace",
     description: "Find 2-3 runners at your pace. No random groups.",

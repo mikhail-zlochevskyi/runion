@@ -2646,10 +2646,7 @@ function firstString(source: Record<string, unknown> | null | undefined, keys: s
 
 function LogoMark() {
   return (
-    <svg className="logo-icon" viewBox="0 0 200 200" aria-hidden="true">
-      <circle cx="100" cy="100" r="52" fill="none" stroke="currentColor" strokeWidth="10" />
-      <circle cx="126" cy="55" r="15" fill="currentColor" />
-      <circle cx="74" cy="55" r="15" fill="currentColor" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element -- inline SVG asset from /public
+    <img className="logo-icon" src="/runion-icon.svg" alt="" aria-hidden="true" />
   );
 }
