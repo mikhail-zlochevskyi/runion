@@ -103,7 +103,7 @@ function isWithinCity(city: CitySlug, lat: number, lng: number) {
 }
 
 const STORAGE_KEY = "runion.preview.profile";
-const WHATSAPP_PRIVACY_COPY = "Hosts see your WhatsApp when you request a spot, so they can vet and coordinate. Not public. Never shared outside the runs you request.";
+const WHATSAPP_PRIVACY_COPY = "Shared with hosts only after they approve your request, so you can coordinate. Not public.";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
   tempo: "TEMPO",
@@ -1445,7 +1445,7 @@ function HostedRunCard({
                 <span>
                   {request.requesterPace ? `${formatPace(request.requesterPace)}/km` : "Pace not shared"} · {intentLabels[request.requesterIntent ?? "social"]}
                 </span>
-                <RequesterSocials whatsapp={request.requesterWhatsapp} socials={request.requesterSocials} />
+                <RequesterSocials socials={request.requesterSocials} />
               </div>
               <div className="request-actions">
                 <button onClick={() => onApprove(request)}>Approve</button>

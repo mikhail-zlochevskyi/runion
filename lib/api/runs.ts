@@ -282,10 +282,10 @@ export async function requestSpot(
   }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: "Supabase client unavailable." };
-  if (!args.requesterWhatsapp.trim() || !args.requesterSocials.trim()) {
+  if (!args.requesterSocials.trim()) {
     return {
       ok: false,
-      error: "Add your WhatsApp and a social link (Strava, Instagram, or Garmin) in your profile before requesting a spot.",
+      error: "Add a social link (Strava, Instagram, or Garmin) in your profile before requesting a spot.",
     };
   }
   if (!isValidSocialsUrl(args.requesterSocials)) {
