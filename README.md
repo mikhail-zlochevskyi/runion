@@ -31,9 +31,9 @@ npm run build
 1. Create a Supabase project.
 2. Copy `.env.example` to `.env.local`.
 3. Fill `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-4. Apply `supabase/migrations/0001_initial_architecture.sql`.
+4. Apply migrations in order: `0001_initial_architecture.sql`, `0002_profile_pace_range.sql`, `0003_participant_contact_snapshot.sql`, `0004_run_lat_lng.sql`.
 
-The app currently uses deterministic matched-run seed data while the Supabase read/write path is wired.
+The Map tab now reads open runs from Supabase via `lib/api/runs.ts` (`fetchOpenRuns`, `createRun`, `requestSpot`). Posted runs persist to the `runs` table and appear on the Map for the matching city. The seed data in `lib/runs.ts` is retained only as a fallback for the Runs feed when no backend session is available.
 
 ## Onboarding Flow
 

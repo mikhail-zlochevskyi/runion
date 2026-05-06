@@ -379,9 +379,15 @@ button {
   color: var(--cream);
   padding: 6px 12px;
   font-size: 0.74rem;
+  touch-action: manipulation;
 }
 
-.fpill.active,
+.fpill.active {
+  border-color: var(--terracotta);
+  background: var(--terracotta);
+  color: var(--cream);
+}
+
 .bottom-nav button.active,
 .detail-cta,
 .modal-cta {
@@ -1308,6 +1314,13 @@ button {
 
 .matched-run-list {
   padding-bottom: 136px;
+}
+
+.run-list-empty {
+  padding: 24px 20px 136px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  text-align: center;
 }
 
 .matched-map-card {

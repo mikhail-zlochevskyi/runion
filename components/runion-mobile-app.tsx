@@ -9,7 +9,17 @@ import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction }
 import type { CitySlug, PreferredGroupSize, Run, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
 import { authSiteUrl } from "@/lib/auth-site-url";
 import { CITY_CONFIG } from "@/lib/config";
-import { getSeedRuns, openSpots, paceLabel } from "@/lib/runs";
+import { getSeedRuns } from "@/lib/runs";
+import {
+  createRun as apiCreateRun,
+  fetchOpenRuns,
+  openSpots as runOpenSpots,
+  paceLabel as runPaceLabel,
+  requestSpot as apiRequestSpot,
+  dayLabel as runDayLabel,
+  timeLabel as runTimeLabel,
+  type RunRow,
+} from "@/lib/api/runs";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -21,6 +31,7 @@ type AppState = "loading" | "auth" | "onboarding" | "runs";
 type RunsTab = "map" | "post" | "runs";
 type SheetState = "hidden" | "peek" | "full";
 type LocationStatus = "idle" | "locating" | "found" | "denied" | "unavailable";
+type MapRunFilter = "all" | "pace_500_530" | "pace_530_600" | "social" | "tempo";
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social" | "consistency";
@@ -111,6 +122,14 @@ const groupSizes: { value: PreferredGroupSize; label: string; recommended?: bool
   { value: "one_to_one", label: "1:1" },
   { value: "two_to_three", label: "2-3", recommended: true },
   { value: "four_plus", label: "4+" }
+];
+
+const mapRunFilters: { value: MapRunFilter; label: string }[] = [
+  { value: "all", label: "All runs" },
+  { value: "pace_500_530", label: "5:00-5:30 /km" },
+  { value: "pace_530_600", label: "5:30-6:00 /km" },
+  { value: "social", label: "Easy / social" },
+  { value: "tempo", label: "Tempo" }
 ];
 
 const defaultDraft: OnboardingDraft = {
@@ -1354,16 +1373,39 @@ function PostRunScreen({
       setError("Add a time and location to post your run.");
       return;
     }
+    if (!profileId || profileId === "preview-user") {
+      setError("Sign in to post a run.");
+      return;
+    }
 
     setBusy(true);
     setError("");
-    const run = buildPostedRun(draft, city);
-    const ok = await createRun(supabase, run, profileId);
-    if (!ok) {
-      saveLocalRun(run);
-    }
+    const cityConf = CITY_CONFIG[city];
+    // TODO(b): replace cityConf.center with the location-picker coords.
+    const [lat, lng] = cityConf.center;
+    const result = await apiCreateRun(
+      supabase,
+      {
+        city,
+        title: titleFromIntent(draft.intent),
+        locationName: draft.locationName.trim(),
+        lat,
+        lng,
+        startTime: draft.startTime,
+        paceSeconds: draft.paceSeconds,
+        distanceKm: draft.distanceKm,
+        intent: draft.intent,
+        maxGroupSize: 3,
+      },
+      profileId
+    );
     setBusy(false);
+    if (!result.ok) {
+      setError(result.error || "Couldn't post run. Try again.");
+      return;
+    }
     onPosted();
+    onMap();
   }
 
   return (
@@ -1467,15 +1509,18 @@ function MatchedRunsMap({
   onShowRuns: () => void;
   onProfile: () => void;
 }) {
-  const runs = useMemo(() => getSeedRuns(city), [city]);
   const cityConf = CITY_CONFIG[city];
-  const [activeRunId, setActiveRunId] = useState(runs[0]?.id ?? "");
+  const [runs, setRuns] = useState<RunRow[]>([]);
+  const [activeFilter, setActiveFilter] = useState<MapRunFilter>("all");
+  const [runsStatus, setRunsStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [activeRunId, setActiveRunId] = useState("");
   const [sheetState, setSheetState] = useState<SheetState>("peek");
   const [dragY, setDragY] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number]>(cityConf.youLL);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [mapNotice, setMapNotice] = useState("");
   const [mapReady, setMapReady] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef({ active: false, moved: false, startY: 0, startSheetY: 0, currentY: 0 });
@@ -1484,14 +1529,39 @@ function MatchedRunsMap({
     youMarker: import("leaflet").Marker;
     markers: import("leaflet").Marker[];
   } | null>(null);
-  const activeRun = runs.find((run) => run.id === activeRunId) ?? runs[0];
+  const filteredRuns = useMemo(() => runs.filter((run) => runMatchesMapFilter(run, activeFilter)), [activeFilter, runs]);
+  const activeRun = filteredRuns.find((run) => run.id === activeRunId) ?? filteredRuns[0];
 
   useEffect(() => {
-    setActiveRunId(runs[0]?.id ?? "");
     setUserLocation(cityConf.youLL);
     setLocationStatus("idle");
     leafletRef.current?.map.setView(cityConf.center, cityConf.zoom);
-  }, [cityConf.center, cityConf.youLL, cityConf.zoom, runs]);
+  }, [cityConf.center, cityConf.youLL, cityConf.zoom, city]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRunsStatus("loading");
+    const hasUserLoc = locationStatus === "found";
+    const lat = hasUserLoc ? userLocation[0] : undefined;
+    const lng = hasUserLoc ? userLocation[1] : undefined;
+    fetchOpenRuns(supabase, { city, lat, lng, radiusM: 2000 })
+      .then((rows) => {
+        if (cancelled) return;
+        setRuns(rows);
+        setRunsStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRunsStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, city, locationStatus, userLocation, refreshKey]);
+
+  useEffect(() => {
+    setActiveRunId((current) => (current && filteredRuns.some((run) => run.id === current) ? current : filteredRuns[0]?.id ?? ""));
+  }, [filteredRuns]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1546,10 +1616,10 @@ function MatchedRunsMap({
       const L = await import("leaflet");
 
       state.markers.forEach((marker) => marker.remove());
-      state.markers = runs.map((run) => {
+      state.markers = filteredRuns.map((run) => {
         const active = run.id === activeRunId;
         const html = `
-          <div class="runion-pin ${active ? "active" : ""} ${openSpots(run) === 0 ? "full" : ""}">
+          <div class="runion-pin ${active ? "active" : ""} ${runOpenSpots(run) === 0 ? "full" : ""}">
             <div class="pin-glow"></div>
             <div class="mark">${run.paceMin}</div>
           </div>`;
@@ -1567,21 +1637,31 @@ function MatchedRunsMap({
     }
 
     renderMarkers();
-  }, [activeRunId, mapReady, runs]);
+  }, [activeRunId, filteredRuns, mapReady]);
 
-  function selectRun(run: Run) {
+  function selectRun(run: RunRow) {
     setActiveRunId(run.id);
     leafletRef.current?.map.flyTo([run.lat, run.lng], 14, { duration: 0.6 });
   }
 
-  async function requestSpot(run: Run) {
-    if (requestedRunId === run.id || openSpots(run) === 0) return;
-
-    const coreRun = seedRunToCoreRun(run, city);
-    const ok = await insertParticipant(supabase, coreRun, profileId, profile);
-    if (ok) {
+  async function requestSpot(run: RunRow) {
+    if (requestedRunId === run.id || runOpenSpots(run) === 0) return;
+    if (!profileId || profileId === "preview-user") {
+      setMapNotice("Sign in to request a spot.");
+      return;
+    }
+    const result = await apiRequestSpot(supabase, {
+      runId: run.id,
+      profileId,
+      requesterName: profile.name?.trim() || "Runner",
+      requesterWhatsapp: normalizeWhatsapp(profile.whatsapp) || null,
+    });
+    if (result.ok) {
       onRequest(run.id);
       setMapNotice("Spot requested. Track it in Runs.");
+      setRefreshKey((k) => k + 1);
+    } else {
+      setMapNotice(result.error || "Couldn't request spot. Try again.");
     }
   }
 
@@ -1744,7 +1824,7 @@ function MatchedRunsMap({
         >
           <p className="sheet-eyebrow">Matched, not random</p>
           <h1>
-            {runs.length} runs near
+            {filteredRuns.length} runs near
             <br />
             <span>your pace</span>
           </h1>
@@ -1752,16 +1832,26 @@ function MatchedRunsMap({
         </header>
 
         <div className="filter-strip" aria-label="Run filters">
-          <button className="fpill active">All runs</button>
-          <button className="fpill">5:00-5:30 /km</button>
-          <button className="fpill">5:30-6:00 /km</button>
-          <button className="fpill">Easy / social</button>
-          <button className="fpill">Tempo</button>
+          {mapRunFilters.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              className={`fpill ${activeFilter === filter.value ? "active" : ""}`}
+              aria-pressed={activeFilter === filter.value}
+              onClick={() => setActiveFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
 
-        {runs.length ? (
+        {runsStatus === "loading" ? (
+          <div className="run-list-empty">Loading runs near you…</div>
+        ) : runsStatus === "error" ? (
+          <div className="run-list-empty">Couldn&apos;t load runs. Try again.</div>
+        ) : filteredRuns.length ? (
           <div className="run-list matched-run-list">
-            {runs.map((run) => (
+            {filteredRuns.map((run) => (
               <MatchedRunCard
                 key={run.id}
                 run={run}
@@ -1772,7 +1862,11 @@ function MatchedRunsMap({
               />
             ))}
           </div>
-        ) : null}
+        ) : runs.length ? (
+          <div className="run-list-empty">No runs match this filter yet.</div>
+        ) : (
+          <div className="run-list-empty">No runs nearby yet. Post the first one.</div>
+        )}
 
         {activeRun ? (
           <div className="active-run-bar">
@@ -1824,40 +1918,36 @@ function MatchedRunCard({
   onSelect,
   onRequest
 }: {
-  run: Run;
+  run: RunRow;
   active: boolean;
   requested: boolean;
   onSelect: () => void;
   onRequest: () => void;
 }) {
-  const copy = matchCopy[run.id] ?? {
-    title: run.locationName,
-    level: run.goal,
-    people: `${Math.max(1, run.spotsTaken + 1)} runners`,
-    tagline: run.goal
-  };
-  const spots = openSpots(run);
+  const spots = runOpenSpots(run);
+  const level = intentLabels[run.intent];
+  const people = run.currentSpots <= 1 ? "1 runner" : `${run.currentSpots} runners`;
 
   return (
     <article className={`run-card matched-map-card ${active ? "active" : ""} ${requested ? "requested" : ""}`}>
       <button className="matched-card-main" onClick={onSelect}>
         <span className="match-topline">
-          <span>{copy.level}</span>
+          <span>{level}</span>
           <strong>
-            {run.day} {run.time}
+            {runDayLabel(run.startTime)} {runTimeLabel(run.startTime)}
           </strong>
         </span>
         <span className="run-card-top">
           <span>
-            <strong>{copy.title}</strong>
+            <strong>{run.title}</strong>
             <small>
-              {run.distanceKm} KM · {paceLabel(run)}/KM · {copy.people}
+              {run.distanceKm} KM · {runPaceLabel(run)}/KM · {people}
             </small>
           </span>
           <b>{run.paceMin}</b>
         </span>
         <span className="run-card-foot">
-          <span>{copy.tagline}</span>
+          <span>{level.toLowerCase()}</span>
           <span className="view-pill">{run.locationName}</span>
         </span>
       </button>
@@ -1867,6 +1957,15 @@ function MatchedRunCard({
       {requested ? <div className="success-state">Spot requested. We&apos;ll confirm your match soon.</div> : null}
     </article>
   );
+}
+
+function runMatchesMapFilter(run: RunRow, filter: MapRunFilter) {
+  if (filter === "all") return true;
+  if (filter === "pace_500_530") return run.paceSeconds >= 300 && run.paceSeconds <= 330;
+  if (filter === "pace_530_600") return run.paceSeconds >= 330 && run.paceSeconds <= 360;
+  if (filter === "social") return run.intent === "social";
+  if (filter === "tempo") return run.intent === "tempo";
+  return true;
 }
 
 function locationStatusLabel(status: LocationStatus) {
