@@ -42,11 +42,16 @@ type SB = NonNullable<ReturnType<typeof createClient>>;
 const FETCH_COLUMNS =
   "id, city, title, description, location_name, location_lat, location_lng, start_time, run_date, time, pace_seconds, pace_min, pace_max, distance_km, intent, goal, organiser_id, max_group_size, current_spots, spots_total, spots_taken, status";
 
+async function sweepStaleRuns(supabase: SB) {
+  await supabase.rpc("expire_stale_runs").then(() => undefined, () => undefined);
+}
+
 export async function fetchOpenRuns(
   supabase: SB | null,
   opts: { city: CitySlug; lat?: number; lng?: number; radiusM?: number }
 ): Promise<RunRow[]> {
   if (!supabase) return [];
+  await sweepStaleRuns(supabase);
   const { city, lat, lng, radiusM = 2000 } = opts;
 
   if (typeof lat === "number" && typeof lng === "number") {
@@ -162,6 +167,7 @@ export async function fetchMyActivity(
   args: { profileId: string }
 ): Promise<MyActivity> {
   if (!supabase) return { pending: [], confirmed: [], hosted: [] };
+  await sweepStaleRuns(supabase);
   const { profileId } = args;
 
   const [participantResult, hostedResult] = await Promise.all([
@@ -174,7 +180,8 @@ export async function fetchMyActivity(
       .from("runs")
       .select(FETCH_COLUMNS)
       .eq("organiser_id", profileId)
-      .in("status", ["active", "full"]),
+      .in("status", ["active", "full", "completed"])
+      .order("start_time", { ascending: false, nullsFirst: false }),
   ]);
 
   const pending: { participant: ParticipantRow; run: RunRow }[] = [];
