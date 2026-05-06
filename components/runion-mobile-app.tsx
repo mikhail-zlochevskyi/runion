@@ -65,6 +65,7 @@ type RunParticipantActivity = {
   status: ParticipantStatus;
   requesterName: string;
   requesterWhatsapp?: string;
+  requesterStrava?: string;
   requesterPace?: number;
   requesterIntent?: CoreIntent;
   createdAt: string;
@@ -100,7 +101,7 @@ function isWithinCity(city: CitySlug, lat: number, lng: number) {
 }
 
 const STORAGE_KEY = "runion.preview.profile";
-const WHATSAPP_PRIVACY_COPY = "We’ll only use this to help approved matches coordinate and improve matching. No promotions. Not public. Never shared with anyone outside an approved match, and never before a request is approved.";
+const WHATSAPP_PRIVACY_COPY = "Hosts see your WhatsApp when you request a spot, so they can vet and coordinate. Not public. Never shared outside the runs you request.";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
   tempo: "TEMPO",
@@ -157,7 +158,7 @@ const defaultDraft: OnboardingDraft = {
   availability: ["morning"],
   preferred_group_size: "two_to_three",
   whatsapp: "",
-  instagram: "",
+  strava_url: "",
   profile_photo_url: ""
 };
 
@@ -275,7 +276,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         availability: data.availability?.length ? data.availability : defaultDraft.availability,
         preferred_group_size: data.preferred_group_size ?? defaultDraft.preferred_group_size,
         whatsapp: data.whatsapp ?? "",
-        instagram: data.instagram ?? "",
+        strava_url: data.strava_url ?? "",
         profile_photo_url: data.avatar_url ?? data.profile_photo_url ?? authProfile?.photoUrl ?? ""
       });
       if (pathname === "/profile") {
@@ -298,16 +299,22 @@ export function RunionMobileApp({ initialCity }: Props) {
   }
 
   async function saveProfileChanges(profile: OnboardingDraft) {
-    const cleanedInstagram = profile.instagram?.replace(/^@/, "").trim();
     const cleanedWhatsapp = normalizeWhatsapp(profile.whatsapp);
+    const cleanedStrava = profile.strava_url?.trim() ?? "";
+    if (!cleanedWhatsapp) {
+      return { ok: false, message: "WhatsApp is required." };
+    }
+    if (!cleanedStrava) {
+      return { ok: false, message: "Strava URL is required." };
+    }
     const paceRange = normalizePaceRange(profile);
     const nextProfile: RunnerProfile = {
       ...profile,
       id: profileId,
       email: profileEmail,
       name: profile.name.trim() || "Runner",
-      instagram: cleanedInstagram,
       whatsapp: cleanedWhatsapp,
+      strava_url: cleanedStrava,
       comfortable_pace_seconds_per_km: paceRange.center,
       comfortable_pace_min_seconds_per_km: paceRange.min,
       comfortable_pace_max_seconds_per_km: paceRange.max,
@@ -334,7 +341,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       availability: nextProfile.availability,
       preferred_group_size: nextProfile.preferred_group_size,
       whatsapp: nextProfile.whatsapp,
-      instagram: nextProfile.instagram,
+      strava_url: nextProfile.strava_url,
       avatar_url: nextProfile.profile_photo_url || null,
       onboarding_completed: true
     };
@@ -441,15 +448,23 @@ export function RunionMobileApp({ initialCity }: Props) {
   }
 
   async function completeOnboarding() {
-    const cleanedInstagram = draft.instagram?.replace(/^@/, "").trim();
     const cleanedWhatsapp = normalizeWhatsapp(draft.whatsapp);
+    const cleanedStrava = draft.strava_url?.trim() ?? "";
+    if (!cleanedWhatsapp) {
+      setAuthNotice("Add your WhatsApp to continue.");
+      return;
+    }
+    if (!cleanedStrava) {
+      setAuthNotice("Add your Strava URL to continue.");
+      return;
+    }
     const profile: RunnerProfile = {
       ...draft,
       id: profileId,
       email: profileEmail,
       name: draft.name.trim() || "Runner",
-      instagram: cleanedInstagram,
       whatsapp: cleanedWhatsapp,
+      strava_url: cleanedStrava,
       comfortable_pace_min_seconds_per_km: draft.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).min,
       comfortable_pace_max_seconds_per_km: draft.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).max,
       onboarding_completed: true
@@ -473,7 +488,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       availability: profile.availability,
       preferred_group_size: profile.preferred_group_size,
       whatsapp: profile.whatsapp,
-      instagram: profile.instagram,
+      strava_url: profile.strava_url,
       avatar_url: profile.profile_photo_url || null,
       onboarding_completed: true
     });
@@ -824,7 +839,7 @@ function OnboardingStep({
         </span>
       </label>
       <label className="field-label">
-        WhatsApp optional
+        WhatsApp <span className="required-tag">required</span>
         <span className="input-wrap">
           <MessageCircle size={16} />
           <input
@@ -837,11 +852,16 @@ function OnboardingStep({
         <span className="privacy-note">{WHATSAPP_PRIVACY_COPY}</span>
       </label>
       <label className="field-label">
-        Instagram optional
+        Strava profile <span className="required-tag">required</span>
         <span className="input-wrap">
-          <span className="at-symbol">@</span>
-          <input value={draft.instagram} onChange={(event) => setDraft((current) => ({ ...current, instagram: event.target.value }))} placeholder="handle" />
+          <input
+            value={draft.strava_url ?? ""}
+            onChange={(event) => setDraft((current) => ({ ...current, strava_url: event.target.value }))}
+            inputMode="url"
+            placeholder="https://www.strava.com/athletes/..."
+          />
         </span>
+        <span className="privacy-note">Hosts see your Strava when you request a spot, so they can vet your pace.</span>
       </label>
     </div>
   );
@@ -1060,8 +1080,8 @@ function ProfileScreen({
     const nextProfile = {
       ...localProfile,
       name: localProfile.name.trim(),
-      instagram: localProfile.instagram?.replace(/^@/, "").trim(),
       whatsapp: normalizeWhatsapp(localProfile.whatsapp),
+      strava_url: localProfile.strava_url?.trim() ?? "",
       comfortable_pace_seconds_per_km: paceRange.center,
       comfortable_pace_min_seconds_per_km: paceRange.min,
       comfortable_pace_max_seconds_per_km: paceRange.max
@@ -1125,7 +1145,7 @@ function ProfileScreen({
           </label>
 
           <label className="field-label">
-            WhatsApp optional
+            WhatsApp <span className="required-tag">required</span>
             <span className="input-wrap">
               <MessageCircle size={16} />
               <input
@@ -1139,11 +1159,16 @@ function ProfileScreen({
           </label>
 
           <label className="field-label">
-            Instagram optional
+            Strava profile <span className="required-tag">required</span>
             <span className="input-wrap">
-              <span className="at-symbol">@</span>
-              <input value={localProfile.instagram ?? ""} onChange={(event) => setLocalProfile((current) => ({ ...current, instagram: event.target.value }))} placeholder="handle" />
+              <input
+                value={localProfile.strava_url ?? ""}
+                onChange={(event) => setLocalProfile((current) => ({ ...current, strava_url: event.target.value }))}
+                inputMode="url"
+                placeholder="https://www.strava.com/athletes/..."
+              />
             </span>
+            <span className="privacy-note">Hosts see your Strava when you request a spot.</span>
           </label>
 
           <label className="field-label">
@@ -1369,7 +1394,10 @@ function HostedRunCard({
       {hosted.confirmedRequests.length ? (
         <div className="approved-contact-list">
           {hosted.confirmedRequests.map((request) => (
-            <ApprovedContact key={request.id} name={request.requesterName} whatsapp={request.requesterWhatsapp} fallback={`${request.requesterName} has not added WhatsApp yet.`} />
+            <div key={request.id} className="approved-contact">
+              <strong>{request.requesterName}</strong>
+              <RequesterSocials whatsapp={request.requesterWhatsapp} strava={request.requesterStrava} />
+            </div>
           ))}
         </div>
       ) : null}
@@ -1383,6 +1411,7 @@ function HostedRunCard({
                 <span>
                   {request.requesterPace ? `${formatPace(request.requesterPace)}/km` : "Pace not shared"} · {intentLabels[request.requesterIntent ?? "social"]}
                 </span>
+                <RequesterSocials whatsapp={request.requesterWhatsapp} strava={request.requesterStrava} />
               </div>
               <div className="request-actions">
                 <button onClick={() => onApprove(request)}>Approve</button>
@@ -1394,6 +1423,32 @@ function HostedRunCard({
       ) : null}
     </article>
   );
+}
+
+function RequesterSocials({ whatsapp, strava }: { whatsapp?: string; strava?: string }) {
+  if (!whatsapp && !strava) return null;
+  return (
+    <div className="requester-socials">
+      {whatsapp ? (
+        <a className="requester-social" href={whatsappHref(whatsapp)} target="_blank" rel="noreferrer">
+          <MessageCircle size={13} />
+          {whatsapp}
+        </a>
+      ) : null}
+      {strava ? (
+        <a className="requester-social" href={strava.startsWith("http") ? strava : `https://${strava}`} target="_blank" rel="noreferrer">
+          <span className="strava-tag">Strava</span>
+          {stravaLabel(strava)}
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function stravaLabel(url: string) {
+  const cleaned = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const slug = cleaned.split("/").pop();
+  return slug || cleaned;
 }
 
 function ApprovedContact({ name, whatsapp, fallback }: { name?: string; whatsapp?: string; fallback: string }) {
@@ -1804,7 +1859,8 @@ function MatchedRunsMap({
       runId: run.id,
       profileId,
       requesterName: profile.name?.trim() || "Runner",
-      requesterWhatsapp: normalizeWhatsapp(profile.whatsapp) || null,
+      requesterWhatsapp: normalizeWhatsapp(profile.whatsapp),
+      requesterStrava: profile.strava_url?.trim() ?? "",
     });
     if (result.ok) {
       onRequest(run.id);
@@ -2263,7 +2319,8 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
     run,
     status: p.status as ParticipantStatus,
     requesterName: p.requesterName ?? fallbackProfile.name ?? "Runner",
-    requesterWhatsapp: p.status === "confirmed" ? p.requesterWhatsapp ?? undefined : undefined,
+    requesterWhatsapp: p.requesterWhatsapp ?? undefined,
+    requesterStrava: p.requesterStrava ?? undefined,
     requesterPace: fallbackProfile.comfortable_pace_seconds_per_km,
     requesterIntent: profileIntentToCoreIntent(fallbackProfile.run_intents[0] ?? "easy_social"),
     createdAt: p.createdAt,

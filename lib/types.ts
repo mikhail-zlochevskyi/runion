@@ -75,7 +75,7 @@ export type RunnerProfile = {
   availability: RunAvailability[];
   preferred_group_size: PreferredGroupSize;
   whatsapp?: string;
-  instagram?: string;
+  strava_url?: string;
   profile_photo_url?: string;
   onboarding_completed: boolean;
 };

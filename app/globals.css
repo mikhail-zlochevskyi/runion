@@ -1444,6 +1444,48 @@ button {
   font-size: 0.75rem;
 }
 
+.required-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(244, 164, 92, 0.18);
+  color: var(--sun);
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.requester-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.requester-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(243, 235, 217, 0.04);
+  color: var(--cream);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.requester-social:hover {
+  border-color: rgba(244, 164, 92, 0.4);
+}
+
+.strava-tag {
+  font-weight: 600;
+  color: #fc4c02;
+}
+
 .matched-map-card {
   display: grid;
   gap: 12px;

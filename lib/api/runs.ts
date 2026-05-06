@@ -143,6 +143,7 @@ export type ParticipantRow = {
   status: ParticipantStatus;
   requesterName: string | null;
   requesterWhatsapp: string | null;
+  requesterStrava: string | null;
   createdAt: string;
 };
 
@@ -166,7 +167,7 @@ export async function fetchMyActivity(
   const [participantResult, hostedResult] = await Promise.all([
     supabase
       .from("run_participants")
-      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, created_at, run:runs(${FETCH_COLUMNS})`)
+      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_strava, created_at, run:runs(${FETCH_COLUMNS})`)
       .eq("user_id", profileId)
       .in("status", ["requested", "confirmed"]),
     supabase
@@ -204,7 +205,7 @@ export async function fetchMyActivity(
     const ids = hostedRuns.map((r) => r.id);
     const { data, error } = await supabase
       .from("run_participants")
-      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, created_at")
+      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_strava, created_at")
       .in("run_id", ids);
     if (!error && data) {
       hostedRequests = (data as Record<string, unknown>[])
@@ -265,35 +266,39 @@ function toParticipantRow(row: Record<string, unknown>): ParticipantRow | null {
     status,
     requesterName: stringFromValue(row.requester_name) ?? null,
     requesterWhatsapp: stringFromValue(row.requester_whatsapp) ?? null,
+    requesterStrava: stringFromValue(row.requester_strava) ?? null,
     createdAt: stringFromValue(row.created_at) ?? new Date().toISOString(),
   };
 }
 
 export async function requestSpot(
   supabase: SB | null,
-  args: { runId: string; profileId: string; requesterName: string; requesterWhatsapp?: string | null }
+  args: {
+    runId: string;
+    profileId: string;
+    requesterName: string;
+    requesterWhatsapp: string;
+    requesterStrava: string;
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  if (!args.requesterWhatsapp.trim() || !args.requesterStrava.trim()) {
+    return {
+      ok: false,
+      error: "Add your WhatsApp and Strava in your profile before requesting a spot.",
+    };
+  }
 
   const payload = {
     run_id: args.runId,
     user_id: args.profileId,
     status: "requested",
     requester_name: args.requesterName,
-    requester_whatsapp: args.requesterWhatsapp ?? null,
+    requester_whatsapp: args.requesterWhatsapp,
+    requester_strava: args.requesterStrava,
   };
   const { error } = await supabase.from("run_participants").insert(payload);
   if (!error) return { ok: true };
-
-  if (/requester_(name|whatsapp)/.test(error.message)) {
-    const r = await supabase.from("run_participants").insert({
-      run_id: args.runId,
-      user_id: args.profileId,
-      status: "requested",
-    });
-    if (!r.error) return { ok: true };
-    return { ok: false, error: r.error.message };
-  }
 
   if (error.code === "23505") {
     return { ok: false, error: "You've already requested this run." };
