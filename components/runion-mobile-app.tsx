@@ -675,16 +675,32 @@ function OnboardingStep({
 
   if (step === 1) {
     const paceRange = normalizePaceRange(draft);
+    const minPercent = ((paceRange.min - 270) / 150) * 100;
+    const maxPercent = ((paceRange.max - 270) / 150) * 100;
 
     return (
       <div className="step-card">
         <Question title="What's your comfortable pace range?" detail="Use the easy range you could hold while still talking." />
-        <div className="pace-readout">{formatPace(paceRange.min)}-{formatPace(paceRange.max)}/km</div>
-        <div className="onboarding-pace-range">
-          <label>
-            <span>Min</span>
+        <div className="pace-readout" aria-live="polite">
+          <span>{formatPace(paceRange.min)}-{formatPace(paceRange.max)}</span>
+          <small>/km</small>
+        </div>
+        <div
+          className="onboarding-pace-range"
+          style={
+            {
+              "--pace-min": `${minPercent}%`,
+              "--pace-max": `${maxPercent}%`
+            } as CSSProperties
+          }
+        >
+          <div className="pace-range-values">
+            <span>Min {formatPace(paceRange.min)}</span>
+            <span>Max {formatPace(paceRange.max)}</span>
+          </div>
+          <div className="dual-pace-slider">
             <input
-              className="pace-slider"
+              aria-label="Minimum comfortable pace"
               type="range"
               min={270}
               max={420}
@@ -704,11 +720,8 @@ function OnboardingStep({
                 })
               }
             />
-          </label>
-          <label>
-            <span>Max</span>
             <input
-              className="pace-slider"
+              aria-label="Maximum comfortable pace"
               type="range"
               min={270}
               max={420}
@@ -728,11 +741,11 @@ function OnboardingStep({
                 })
               }
             />
-          </label>
-        </div>
-        <div className="slider-labels">
-          <span>4:30</span>
-          <span>7:00</span>
+          </div>
+          <div className="slider-labels">
+            <span>4:30</span>
+            <span>7:00</span>
+          </div>
         </div>
       </div>
     );
