@@ -6,18 +6,22 @@ import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, LogOut, Mai
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
-import type { CitySlug, PreferredGroupSize, Run, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
+import type { CitySlug, PreferredGroupSize, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
 import { authSiteUrl } from "@/lib/auth-site-url";
 import { CITY_CONFIG } from "@/lib/config";
-import { getSeedRuns } from "@/lib/runs";
 import {
+  cancelOwnRequest as apiCancelOwnRequest,
   createRun as apiCreateRun,
+  fetchMyActivity as apiFetchMyActivity,
   fetchOpenRuns,
   openSpots as runOpenSpots,
   paceLabel as runPaceLabel,
   requestSpot as apiRequestSpot,
+  setRequestStatus as apiSetRequestStatus,
   dayLabel as runDayLabel,
   timeLabel as runTimeLabel,
+  type ParticipantRow,
+  type ParticipantStatus as ApiParticipantStatus,
   type RunRow,
 } from "@/lib/api/runs";
 import { createClient } from "@/lib/supabase/client";
@@ -96,9 +100,6 @@ function isWithinCity(city: CitySlug, lat: number, lng: number) {
 }
 
 const STORAGE_KEY = "runion.preview.profile";
-const LOCAL_RUNS_KEY = "runion.local.runs";
-const LOCAL_PARTICIPANTS_KEY = "runion.local.participants";
-const LIVE_TOAST_KEY = "runion.run.live";
 const WHATSAPP_PRIVACY_COPY = "We’ll only use this to help approved matches coordinate and improve matching. No promotions. Not public. Never shared with anyone outside an approved match, and never before a request is approved.";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
@@ -598,7 +599,6 @@ export function RunionMobileApp({ initialCity }: Props) {
         onBack={() => router.push(`/runs#${city}`)}
         onMap={() => router.push(`/map#${city}`)}
         onPosted={() => {
-          window.localStorage.setItem(LIVE_TOAST_KEY, "1");
           router.push(`/runs#${city}`);
         }}
         onProfile={() => router.push(`/profile#${city}`)}
@@ -864,35 +864,54 @@ function RunsFeed({
 
     async function loadRuns() {
       setLoading(true);
-      const nextActivity = await fetchMyRunActivity(supabase, city, profileId, profile);
+      if (!profileId || profileId === "preview-user") {
+        if (mounted) {
+          setActivity({ pending: [], confirmed: [], hosted: [] });
+          setLoading(false);
+        }
+        return;
+      }
+      const raw = await apiFetchMyActivity(supabase, { profileId });
       if (!mounted) return;
-      setActivity(nextActivity);
+      setActivity(adaptMyActivity(raw, profile));
       setLoading(false);
     }
 
     loadRuns();
-
-    if (window.localStorage.getItem(LIVE_TOAST_KEY)) {
-      window.localStorage.removeItem(LIVE_TOAST_KEY);
-      setToast("Your run is live. Requests will appear here.");
-    }
 
     return () => {
       mounted = false;
     };
   }, [city, profile, profileId, supabase]);
 
-  function refreshLocalActivity(message?: string) {
-    fetchMyRunActivity(supabase, city, profileId, profile).then(setActivity);
+
+  async function refreshActivity(message?: string) {
+    if (!profileId || profileId === "preview-user") return;
+    const raw = await apiFetchMyActivity(supabase, { profileId });
+    setActivity(adaptMyActivity(raw, profile));
     if (message) setToast(message);
   }
 
   async function updateRequestStatus(request: RunParticipantActivity, status: ParticipantStatus) {
-    const ok = await updateParticipantStatus(supabase, request, status);
-    if (ok) {
-      refreshLocalActivity(status === "confirmed" ? "Request approved." : "Request declined.");
-    } else {
-      setToast("Could not update this request. Try again.");
+    if (status === "declined" || status === "confirmed") {
+      const result = await apiSetRequestStatus(supabase, {
+        participantId: request.id,
+        status: status as ApiParticipantStatus,
+      });
+      if (result.ok) {
+        await refreshActivity(status === "confirmed" ? "Request approved." : "Request declined.");
+      } else {
+        setToast(result.error || "Could not update this request. Try again.");
+      }
+      return;
+    }
+    if (status === "requested") {
+      const result = await apiCancelOwnRequest(supabase, { participantId: request.id });
+      if (result.ok) {
+        await refreshActivity("Request cancelled.");
+      } else {
+        setToast(result.error || "Could not cancel this request. Try again.");
+      }
     }
   }
 
@@ -2097,371 +2116,9 @@ function OptionStack({
   );
 }
 
-async function fetchCoreRuns(supabase: ReturnType<typeof createClient>, city: CitySlug): Promise<CoreRun[]> {
-  if (!supabase) return [];
-
-  const { data, error } = await supabase
-    .from("runs")
-    .select("*")
-    .in("status", ["active", "full"])
-    .order("start_time", { ascending: true, nullsFirst: false })
-    .order("run_date", { ascending: true, nullsFirst: false });
-
-  if (error || !data) return [];
-
-  return data
-    .map((row) => dbRowToCoreRun(row as Record<string, unknown>, city))
-    .filter((run): run is CoreRun => Boolean(run));
-}
-
-function dbRowToCoreRun(row: Record<string, unknown>, fallbackCity: CitySlug): CoreRun | null {
-  const rowCity = firstString(row, ["city"]) as CitySlug | undefined;
-  if (rowCity && rowCity !== fallbackCity) return null;
-
-  const startTime = firstString(row, ["start_time"]) ?? legacyStartTime(row);
-  const paceSeconds = secondsFromValue(row.pace_seconds) ?? secondsFromValue(row.pace_min) ?? 315;
-  const paceMin = formatPace(secondsFromValue(row.pace_min) ?? Math.max(270, paceSeconds - 10));
-  const paceMax = formatPace(secondsFromValue(row.pace_max) ?? Math.min(450, paceSeconds + 10));
-  const currentSpots = numberFromValue(row.current_spots) ?? numberFromValue(row.spots_taken) ?? 1;
-  const maxGroupSize = numberFromValue(row.max_group_size) ?? numberFromValue(row.spots_total) ?? 3;
-  const intent = normalizeIntent(firstString(row, ["intent", "goal"]));
-  const title = firstString(row, ["title"]) ?? titleFromIntent(intent);
-  const locationName = firstString(row, ["location_name", "locationName"]) ?? "Local meeting point";
-
-  if (!startTime) return null;
-
-  return {
-    id: String(row.id),
-    city: rowCity ?? fallbackCity,
-    title,
-    description: firstString(row, ["description"]),
-    paceSeconds,
-    paceMin,
-    paceMax,
-    distanceKm: numberFromValue(row.distance_km) ?? 7,
-    startTime,
-    locationName,
-    intent,
-    participants: participantLabel(firstString(row, ["organiser_name"]) ?? "Runner", currentSpots),
-    maxGroupSize,
-    currentSpots,
-    status: firstString(row, ["status"]) ?? "active",
-    source: "db"
-  };
-}
-
-function matchRuns(runs: CoreRun[], profile: OnboardingDraft) {
-  const pace = profile.comfortable_pace_seconds_per_km;
-  const preferredIntents = profile.run_intents.map(profileIntentToCoreIntent);
-  const scored = runs
-    .filter((run) => Math.abs(run.paceSeconds - pace) <= 20)
-    .filter((run) => availabilityMatches(run.startTime, profile.availability))
-    .map((run) => {
-      const intentScore = preferredIntents.includes(run.intent) ? 0 : 1;
-      const paceScore = Math.abs(run.paceSeconds - pace);
-      return { run, score: intentScore * 1000 + paceScore };
-    })
-    .sort((a, b) => a.score - b.score || new Date(a.run.startTime).getTime() - new Date(b.run.startTime).getTime());
-
-  return scored.map(({ run }) => run);
-}
-
-async function fetchMyRunActivity(supabase: ReturnType<typeof createClient>, city: CitySlug, profileId: string | undefined, profile: OnboardingDraft) {
-  const localRuns = readLocalRuns(city);
-  const localParticipants = readLocalParticipants(city);
-  const localActivity = buildLocalActivity(localRuns, localParticipants);
-
-  if (!profileId || profileId === "preview-user" || !supabase) return localActivity;
-
-  const [participantResult, hostedResult] = await Promise.all([
-    supabase
-      .from("run_participants")
-      .select("id, status, created_at, run:runs(*)")
-      .eq("user_id", profileId)
-      .in("status", ["requested", "confirmed"]),
-    supabase
-      .from("runs")
-      .select("*")
-      .or(`created_by.eq.${profileId},organiser_id.eq.${profileId}`)
-      .order("start_time", { ascending: true, nullsFirst: false })
-  ]);
-
-  if (participantResult.error || hostedResult.error) return localActivity;
-
-  const participantItems =
-    participantResult.data
-      ?.map((row) => participantRowToActivity(row as Record<string, unknown>, city, profile))
-      .filter((item): item is RunParticipantActivity => Boolean(item)) ?? [];
-
-  const hostedRuns =
-    hostedResult.data
-      ?.map((row) => dbRowToCoreRun(row as Record<string, unknown>, city))
-      .filter((run): run is CoreRun => Boolean(run)) ?? [];
-
-  const hostedIds = hostedRuns.map((run) => run.id);
-  let requestResult: { data: unknown[] | null; error: { message: string } | null } = hostedIds.length
-    ? await supabase.from("run_participants").select("id, run_id, status, created_at, requester_name, requester_whatsapp").in("run_id", hostedIds)
-    : { data: [], error: null };
-
-  if (requestResult.error && isMissingContactSnapshotColumnError(requestResult.error.message) && hostedIds.length) {
-    requestResult = await supabase.from("run_participants").select("id, run_id, status, created_at").in("run_id", hostedIds);
-  }
-
-  if (requestResult.error) {
-    return {
-      pending: [...localActivity.pending, ...participantItems.filter((item) => item.status === "requested")],
-      confirmed: [...localActivity.confirmed, ...participantItems.filter((item) => item.status === "confirmed")],
-      hosted: [...localActivity.hosted, ...hostedRuns.map((run) => ({ run, confirmedCount: 0, confirmedRequests: [], pendingRequests: [] }))]
-    };
-  }
-
-  const hosted = hostedRuns.map((run) => {
-    const requests =
-      requestResult.data
-        ?.filter((row) => (row as Record<string, unknown>).run_id === run.id)
-        .map((row) => participantRequestRowToActivity(row as Record<string, unknown>, run, profile))
-        .filter((item): item is RunParticipantActivity => Boolean(item)) ?? [];
-
-    return {
-      run,
-      confirmedCount: requests.filter((item) => item.status === "confirmed").length,
-      confirmedRequests: requests.filter((item) => item.status === "confirmed"),
-      pendingRequests: requests.filter((item) => item.status === "requested")
-    };
-  });
-
-  return {
-    pending: [...localActivity.pending, ...participantItems.filter((item) => item.status === "requested")],
-    confirmed: [...localActivity.confirmed, ...participantItems.filter((item) => item.status === "confirmed")],
-    hosted: [...localActivity.hosted, ...hosted]
-  };
-}
-
-function buildLocalActivity(localRuns: CoreRun[], participants: RunParticipantActivity[]) {
-  const pending = participants.filter((item) => item.status === "requested" && !localRuns.some((run) => run.id === item.run.id));
-  const confirmed = participants.filter((item) => item.status === "confirmed" && !localRuns.some((run) => run.id === item.run.id));
-  const hosted = localRuns.map((run) => {
-    const requests = participants.filter((item) => item.run.id === run.id);
-    return {
-      run,
-      confirmedCount: requests.filter((item) => item.status === "confirmed").length,
-      confirmedRequests: requests.filter((item) => item.status === "confirmed"),
-      pendingRequests: requests.filter((item) => item.status === "requested")
-    };
-  });
-
-  return { pending, confirmed, hosted };
-}
-
-function participantRowToActivity(row: Record<string, unknown>, city: CitySlug, profile: OnboardingDraft): RunParticipantActivity | null {
-  const run = row.run && typeof row.run === "object" && !Array.isArray(row.run) ? dbRowToCoreRun(row.run as Record<string, unknown>, city) : null;
-  if (!run) return null;
-
-  return participantRequestRowToActivity(row, run, profile);
-}
-
-function participantRequestRowToActivity(row: Record<string, unknown>, run: CoreRun, profile: OnboardingDraft): RunParticipantActivity | null {
-  const status = normalizeParticipantStatus(firstString(row, ["status"]));
-  if (!status) return null;
-
-  return {
-    id: String(row.id),
-    run,
-    status,
-    requesterName: firstString(row, ["requester_name", "requesterName"]) ?? profile.name ?? "Runner",
-    requesterWhatsapp: status === "confirmed" ? firstString(row, ["requester_whatsapp", "requesterWhatsapp"]) ?? profile.whatsapp : undefined,
-    requesterPace: profile.comfortable_pace_seconds_per_km,
-    requesterIntent: profileIntentToCoreIntent(profile.run_intents[0] ?? "easy_social"),
-    createdAt: firstString(row, ["created_at"]) ?? new Date().toISOString()
-  };
-}
 
 function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] }) {
   return activity.pending.length > 0 || activity.confirmed.length > 0 || activity.hosted.length > 0;
-}
-
-async function insertParticipant(supabase: ReturnType<typeof createClient>, run: CoreRun, profileId: string | undefined, profile: OnboardingDraft) {
-  if (!profileId || profileId === "preview-user" || !supabase || run.source !== "db") {
-    saveLocalParticipant(run, profile, "requested");
-    return true;
-  }
-
-  const participantPayload = {
-    run_id: run.id,
-    user_id: profileId,
-    status: "requested",
-    requester_name: profile.name || "Runner",
-    requester_whatsapp: normalizeWhatsapp(profile.whatsapp) || null
-  };
-
-  const { error } = await supabase.from("run_participants").insert(participantPayload);
-
-  if (!error) return true;
-
-  if (error.message.includes("requester_name") || error.message.includes("requester_whatsapp")) {
-    const legacyResult = await supabase.from("run_participants").insert({
-      run_id: run.id,
-      user_id: profileId,
-      status: "requested"
-    });
-
-    if (!legacyResult.error) return true;
-  }
-
-  const fallback = await supabase.from("matches").insert({
-    run_id: run.id,
-    joiner_id: profileId,
-    status: "pending"
-  });
-
-  if (!fallback.error) {
-    saveLocalParticipant(run, profile, "requested");
-    return true;
-  }
-
-  return false;
-}
-
-async function updateParticipantStatus(supabase: ReturnType<typeof createClient>, request: RunParticipantActivity, status: ParticipantStatus) {
-  if (request.run.source !== "db" || request.id.startsWith("local-") || !supabase) {
-    updateLocalParticipantStatus(request.id, status);
-    return true;
-  }
-
-  const { error } = await supabase.from("run_participants").update({ status }).eq("id", request.id);
-  return !error;
-}
-
-async function createRun(supabase: ReturnType<typeof createClient>, run: CoreRun, profileId?: string) {
-  if (!profileId || profileId === "preview-user" || !supabase) return false;
-
-  const cityConf = CITY_CONFIG[runCity(run, "bcn")];
-  const start = new Date(run.startTime);
-  const day = start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-  const runDate = run.startTime.slice(0, 10);
-  const time = run.startTime.slice(11, 16);
-  const { error } = await supabase.from("runs").insert({
-    title: run.title,
-    description: run.description ?? null,
-    pace_min: secondsToInterval(Math.max(270, run.paceSeconds - 10)),
-    pace_max: secondsToInterval(Math.min(450, run.paceSeconds + 10)),
-    pace_seconds: run.paceSeconds,
-    distance_km: run.distanceKm,
-    start_time: run.startTime,
-    location_name: run.locationName,
-    intent: run.intent,
-    created_by: profileId,
-    organiser_id: profileId,
-    max_group_size: run.maxGroupSize,
-    current_spots: 1,
-    city: runCity(run, "bcn"),
-    location: `POINT(${cityConf.center[1]} ${cityConf.center[0]})`,
-    day,
-    run_date: runDate,
-    time,
-    goal: run.intent,
-    spots_total: run.maxGroupSize,
-    spots_taken: 1,
-    status: "active"
-  });
-
-  return !error;
-}
-
-function mockCoreRuns(city: CitySlug): CoreRun[] {
-  return getSeedRuns(city).map((run) => seedRunToCoreRun(run, city));
-}
-
-function seedRunToCoreRun(run: Run, city: CitySlug): CoreRun {
-  return {
-    id: run.id,
-    city,
-    title: titleFromIntent(normalizeIntent(run.goal)),
-    paceSeconds: secondsFromPace(run.paceMin),
-    paceMin: run.paceMin,
-    paceMax: run.paceMax,
-    distanceKm: run.distanceKm,
-    startTime: `${run.runDate}T${run.time}:00`,
-    locationName: run.locationName,
-    intent: normalizeIntent(run.goal),
-    participants: participantLabel(run.organiser.name, run.spotsTaken + 1),
-    maxGroupSize: run.spotsTotal + 1,
-    currentSpots: run.spotsTaken + 1,
-    status: run.status,
-    source: "mock"
-  };
-}
-
-function buildPostedRun(draft: PostRunDraft, city: CitySlug): CoreRun {
-  return {
-    id: `local-${Date.now()}`,
-    city,
-    title: titleFromIntent(draft.intent),
-    paceSeconds: draft.paceSeconds,
-    paceMin: formatPace(Math.max(270, draft.paceSeconds - 10)),
-    paceMax: formatPace(Math.min(450, draft.paceSeconds + 10)),
-    distanceKm: draft.distanceKm,
-    startTime: draft.startTime,
-    locationName: draft.locationName.trim(),
-    intent: draft.intent,
-    participants: "You",
-    maxGroupSize: 3,
-    currentSpots: 1,
-    status: "active",
-    source: "local"
-  };
-}
-
-function saveLocalRun(run: CoreRun) {
-  const runs = readLocalRuns();
-  window.localStorage.setItem(LOCAL_RUNS_KEY, JSON.stringify([run, ...runs]));
-}
-
-function saveLocalParticipant(run: CoreRun, profile: OnboardingDraft, status: ParticipantStatus) {
-  const participants = readLocalParticipants();
-  if (participants.some((item) => item.run.id === run.id && item.status !== "declined")) return;
-
-  const participant: RunParticipantActivity = {
-    id: `local-participant-${Date.now()}`,
-    run,
-    status,
-    requesterName: profile.name || "You",
-    requesterWhatsapp: normalizeWhatsapp(profile.whatsapp),
-    requesterPace: profile.comfortable_pace_seconds_per_km,
-    requesterIntent: profileIntentToCoreIntent(profile.run_intents[0] ?? "easy_social"),
-    createdAt: new Date().toISOString()
-  };
-
-  window.localStorage.setItem(LOCAL_PARTICIPANTS_KEY, JSON.stringify([participant, ...participants]));
-}
-
-function updateLocalParticipantStatus(id: string, status: ParticipantStatus) {
-  const participants = readLocalParticipants().map((item) => (item.id === id ? { ...item, status } : item));
-  window.localStorage.setItem(LOCAL_PARTICIPANTS_KEY, JSON.stringify(participants));
-}
-
-function readLocalRuns(city?: CitySlug): CoreRun[] {
-  try {
-    const raw = window.localStorage.getItem(LOCAL_RUNS_KEY);
-    const runs = raw ? (JSON.parse(raw) as CoreRun[]) : [];
-    return city ? runs.filter((run) => runCity(run, city) === city) : runs;
-  } catch {
-    return [];
-  }
-}
-
-function readLocalParticipants(city?: CitySlug): RunParticipantActivity[] {
-  try {
-    const raw = window.localStorage.getItem(LOCAL_PARTICIPANTS_KEY);
-    const participants = raw ? (JSON.parse(raw) as RunParticipantActivity[]) : [];
-    return city ? participants.filter((item) => runCity(item.run, city) === city) : participants;
-  } catch {
-    return [];
-  }
-}
-
-function runCity(run: CoreRun, fallback: CitySlug) {
-  return run.city ?? fallback;
 }
 
 function titleFromIntent(intent: CoreIntent) {
@@ -2508,6 +2165,58 @@ function participantLabel(name: string, count: number) {
 function formatRunStart(value: string) {
   const date = new Date(value);
   return date.toLocaleDateString("en-US", { weekday: "short" }) + " " + date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function runRowToCoreRun(run: RunRow): CoreRun {
+  return {
+    id: run.id,
+    city: run.city,
+    title: run.title,
+    description: run.description ?? undefined,
+    paceSeconds: run.paceSeconds,
+    paceMin: run.paceMin,
+    paceMax: run.paceMax,
+    distanceKm: run.distanceKm,
+    startTime: run.startTime,
+    locationName: run.locationName,
+    intent: run.intent,
+    participants: participantLabel("Host", run.currentSpots),
+    maxGroupSize: run.maxGroupSize,
+    currentSpots: run.currentSpots,
+    status: run.status,
+    source: "db",
+  };
+}
+
+function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfile: OnboardingDraft): RunParticipantActivity {
+  return {
+    id: p.id,
+    run,
+    status: p.status as ParticipantStatus,
+    requesterName: p.requesterName ?? fallbackProfile.name ?? "Runner",
+    requesterWhatsapp: p.status === "confirmed" ? p.requesterWhatsapp ?? undefined : undefined,
+    requesterPace: fallbackProfile.comfortable_pace_seconds_per_km,
+    requesterIntent: profileIntentToCoreIntent(fallbackProfile.run_intents[0] ?? "easy_social"),
+    createdAt: p.createdAt,
+  };
+}
+
+function adaptMyActivity(
+  raw: import("@/lib/api/runs").MyActivity,
+  profile: OnboardingDraft
+): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] } {
+  const pending = raw.pending.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
+  const confirmed = raw.confirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
+  const hosted: HostedRunActivity[] = raw.hosted.map(({ run, pending: pendingRows, confirmed: confirmedRows }) => {
+    const core = runRowToCoreRun(run);
+    return {
+      run: core,
+      confirmedCount: confirmedRows.length,
+      confirmedRequests: confirmedRows.map((p) => participantRowToActivity(p, core, profile)),
+      pendingRequests: pendingRows.map((p) => participantRowToActivity(p, core, profile)),
+    };
+  });
+  return { pending, confirmed, hosted };
 }
 
 function PostLocationPicker({
@@ -2713,10 +2422,6 @@ function normalizePaceRange(profile: Pick<RunnerProfile, "comfortable_pace_secon
 
 function isMissingPaceRangeColumnError(message: string) {
   return message.includes("comfortable_pace_min_seconds_per_km") || message.includes("comfortable_pace_max_seconds_per_km");
-}
-
-function isMissingContactSnapshotColumnError(message: string) {
-  return message.includes("requester_name") || message.includes("requester_whatsapp");
 }
 
 function normalizeWhatsapp(value?: string) {

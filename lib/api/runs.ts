@@ -134,6 +134,141 @@ export async function createRun(
   return { ok: true, id: data?.id as string | undefined };
 }
 
+export type ParticipantStatus = "requested" | "confirmed" | "declined";
+
+export type ParticipantRow = {
+  id: string;
+  runId: string;
+  userId: string;
+  status: ParticipantStatus;
+  requesterName: string | null;
+  requesterWhatsapp: string | null;
+  createdAt: string;
+};
+
+export type MyActivity = {
+  pending: { participant: ParticipantRow; run: RunRow }[];
+  confirmed: { participant: ParticipantRow; run: RunRow }[];
+  hosted: {
+    run: RunRow;
+    pending: ParticipantRow[];
+    confirmed: ParticipantRow[];
+  }[];
+};
+
+export async function fetchMyActivity(
+  supabase: SB | null,
+  args: { profileId: string }
+): Promise<MyActivity> {
+  if (!supabase) return { pending: [], confirmed: [], hosted: [] };
+  const { profileId } = args;
+
+  const [participantResult, hostedResult] = await Promise.all([
+    supabase
+      .from("run_participants")
+      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, created_at, run:runs(${FETCH_COLUMNS})`)
+      .eq("user_id", profileId)
+      .in("status", ["requested", "confirmed"]),
+    supabase
+      .from("runs")
+      .select(FETCH_COLUMNS)
+      .eq("organiser_id", profileId)
+      .in("status", ["active", "full"]),
+  ]);
+
+  const pending: { participant: ParticipantRow; run: RunRow }[] = [];
+  const confirmed: { participant: ParticipantRow; run: RunRow }[] = [];
+
+  if (!participantResult.error && participantResult.data) {
+    for (const row of participantResult.data as Record<string, unknown>[]) {
+      const runRaw = row.run as Record<string, unknown> | null;
+      if (!runRaw) continue;
+      const run = toRunRow(runRaw, (runRaw.city as CitySlug) ?? "bcn");
+      if (!run) continue;
+      const participant = toParticipantRow(row);
+      if (!participant) continue;
+      if (participant.status === "requested") pending.push({ participant, run });
+      else if (participant.status === "confirmed") confirmed.push({ participant, run });
+    }
+  }
+
+  const hostedRuns: RunRow[] =
+    !hostedResult.error && hostedResult.data
+      ? (hostedResult.data as Record<string, unknown>[])
+          .map((row) => toRunRow(row, (row.city as CitySlug) ?? "bcn"))
+          .filter((r): r is RunRow => Boolean(r))
+      : [];
+
+  let hostedRequests: ParticipantRow[] = [];
+  if (hostedRuns.length) {
+    const ids = hostedRuns.map((r) => r.id);
+    const { data, error } = await supabase
+      .from("run_participants")
+      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, created_at")
+      .in("run_id", ids);
+    if (!error && data) {
+      hostedRequests = (data as Record<string, unknown>[])
+        .map(toParticipantRow)
+        .filter((p): p is ParticipantRow => Boolean(p));
+    }
+  }
+
+  const hosted = hostedRuns.map((run) => {
+    const requests = hostedRequests.filter((r) => r.runId === run.id);
+    return {
+      run,
+      pending: requests.filter((r) => r.status === "requested"),
+      confirmed: requests.filter((r) => r.status === "confirmed"),
+    };
+  });
+
+  return { pending, confirmed, hosted };
+}
+
+export async function setRequestStatus(
+  supabase: SB | null,
+  args: { participantId: string; status: ParticipantStatus }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  const { error } = await supabase
+    .from("run_participants")
+    .update({ status: args.status })
+    .eq("id", args.participantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function cancelOwnRequest(
+  supabase: SB | null,
+  args: { participantId: string }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  const { error } = await supabase
+    .from("run_participants")
+    .delete()
+    .eq("id", args.participantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+function toParticipantRow(row: Record<string, unknown>): ParticipantRow | null {
+  const id = row.id != null ? String(row.id) : null;
+  const runId = row.run_id != null ? String(row.run_id) : null;
+  const userId = row.user_id != null ? String(row.user_id) : null;
+  const status = stringFromValue(row.status);
+  if (!id || !runId || !userId || !status) return null;
+  if (status !== "requested" && status !== "confirmed" && status !== "declined") return null;
+  return {
+    id,
+    runId,
+    userId,
+    status,
+    requesterName: stringFromValue(row.requester_name) ?? null,
+    requesterWhatsapp: stringFromValue(row.requester_whatsapp) ?? null,
+    createdAt: stringFromValue(row.created_at) ?? new Date().toISOString(),
+  };
+}
+
 export async function requestSpot(
   supabase: SB | null,
   args: { runId: string; profileId: string; requesterName: string; requesterWhatsapp?: string | null }
