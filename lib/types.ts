@@ -74,6 +74,7 @@ export type RunnerProfile = {
   run_intents: RunIntent[];
   availability: RunAvailability[];
   preferred_group_size: PreferredGroupSize;
+  whatsapp?: string;
   instagram?: string;
   profile_photo_url?: string;
   onboarding_completed: boolean;

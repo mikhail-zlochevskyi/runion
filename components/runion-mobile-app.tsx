@@ -2,11 +2,12 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, LogOut, Mail, MapPin, Plus, Save, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
 import type { CitySlug, PreferredGroupSize, Run, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
+import { authSiteUrl } from "@/lib/auth-site-url";
 import { CITY_CONFIG } from "@/lib/config";
 import { getSeedRuns, openSpots, paceLabel } from "@/lib/runs";
 import { createClient } from "@/lib/supabase/client";
@@ -48,6 +49,7 @@ type RunParticipantActivity = {
   run: CoreRun;
   status: ParticipantStatus;
   requesterName: string;
+  requesterWhatsapp?: string;
   requesterPace?: number;
   requesterIntent?: CoreIntent;
   createdAt: string;
@@ -56,6 +58,7 @@ type RunParticipantActivity = {
 type HostedRunActivity = {
   run: CoreRun;
   confirmedCount: number;
+  confirmedRequests: RunParticipantActivity[];
   pendingRequests: RunParticipantActivity[];
 };
 
@@ -71,6 +74,7 @@ const STORAGE_KEY = "runion.preview.profile";
 const LOCAL_RUNS_KEY = "runion.local.runs";
 const LOCAL_PARTICIPANTS_KEY = "runion.local.participants";
 const LIVE_TOAST_KEY = "runion.run.live";
+const WHATSAPP_PRIVACY_COPY = "We’ll only use this to help approved matches coordinate and improve matching. No promotions. Not public. Never shared with anyone outside an approved match, and never before a request is approved.";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
   tempo: "TEMPO",
@@ -118,6 +122,7 @@ const defaultDraft: OnboardingDraft = {
   run_intents: ["consistency"],
   availability: ["morning"],
   preferred_group_size: "two_to_three",
+  whatsapp: "",
   instagram: "",
   profile_photo_url: ""
 };
@@ -235,6 +240,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         run_intents: data.run_intents?.length ? data.run_intents : defaultDraft.run_intents,
         availability: data.availability?.length ? data.availability : defaultDraft.availability,
         preferred_group_size: data.preferred_group_size ?? defaultDraft.preferred_group_size,
+        whatsapp: data.whatsapp ?? "",
         instagram: data.instagram ?? "",
         profile_photo_url: data.avatar_url ?? data.profile_photo_url ?? authProfile?.photoUrl ?? ""
       });
@@ -259,6 +265,7 @@ export function RunionMobileApp({ initialCity }: Props) {
 
   async function saveProfileChanges(profile: OnboardingDraft) {
     const cleanedInstagram = profile.instagram?.replace(/^@/, "").trim();
+    const cleanedWhatsapp = normalizeWhatsapp(profile.whatsapp);
     const paceRange = normalizePaceRange(profile);
     const nextProfile: RunnerProfile = {
       ...profile,
@@ -266,6 +273,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       email: profileEmail,
       name: profile.name.trim() || "Runner",
       instagram: cleanedInstagram,
+      whatsapp: cleanedWhatsapp,
       comfortable_pace_seconds_per_km: paceRange.center,
       comfortable_pace_min_seconds_per_km: paceRange.min,
       comfortable_pace_max_seconds_per_km: paceRange.max,
@@ -291,6 +299,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       run_intents: nextProfile.run_intents,
       availability: nextProfile.availability,
       preferred_group_size: nextProfile.preferred_group_size,
+      whatsapp: nextProfile.whatsapp,
       instagram: nextProfile.instagram,
       avatar_url: nextProfile.profile_photo_url || null,
       onboarding_completed: true
@@ -340,7 +349,7 @@ export function RunionMobileApp({ initialCity }: Props) {
     setAuthNotice("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: authSiteUrl() }
     });
     if (error) setAuthNotice(error.message);
     setAuthBusy(false);
@@ -359,10 +368,11 @@ export function RunionMobileApp({ initialCity }: Props) {
 
     setAuthBusy(true);
     setAuthNotice("");
+    const redirectTo = authSiteUrl();
     const result =
       authMode === "magic"
-        ? await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } })
-        : await supabase.auth.signUp({ email, password });
+        ? await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
 
     if (result.error) {
       setAuthNotice(result.error.message);
@@ -389,12 +399,14 @@ export function RunionMobileApp({ initialCity }: Props) {
 
   async function completeOnboarding() {
     const cleanedInstagram = draft.instagram?.replace(/^@/, "").trim();
+    const cleanedWhatsapp = normalizeWhatsapp(draft.whatsapp);
     const profile: RunnerProfile = {
       ...draft,
       id: profileId,
       email: profileEmail,
       name: draft.name.trim() || "Runner",
       instagram: cleanedInstagram,
+      whatsapp: cleanedWhatsapp,
       comfortable_pace_min_seconds_per_km: draft.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).min,
       comfortable_pace_max_seconds_per_km: draft.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(draft.comfortable_pace_seconds_per_km).max,
       onboarding_completed: true
@@ -417,6 +429,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       run_intents: profile.run_intents,
       availability: profile.availability,
       preferred_group_size: profile.preferred_group_size,
+      whatsapp: profile.whatsapp,
       instagram: profile.instagram,
       avatar_url: profile.profile_photo_url || null,
       onboarding_completed: true
@@ -756,6 +769,19 @@ function OnboardingStep({
         </span>
       </label>
       <label className="field-label">
+        WhatsApp optional
+        <span className="input-wrap">
+          <MessageCircle size={16} />
+          <input
+            value={draft.whatsapp ?? ""}
+            onChange={(event) => setDraft((current) => ({ ...current, whatsapp: event.target.value }))}
+            inputMode="tel"
+            placeholder="+34 600 000 000"
+          />
+        </span>
+        <span className="privacy-note">{WHATSAPP_PRIVACY_COPY}</span>
+      </label>
+      <label className="field-label">
         Instagram optional
         <span className="input-wrap">
           <span className="at-symbol">@</span>
@@ -849,7 +875,7 @@ function RunsFeed({
           <div className="my-runs-stack">
             <ActivitySection title="Confirmed runs" empty="No confirmed runs yet.">
               {activity.confirmed.map((item) => (
-                <ActivityRunCard key={item.id} item={item} badge="Confirmed" note={item.run.participants} cta="View details" />
+                <ActivityRunCard key={item.id} item={item} badge="Confirmed" note={item.run.participants} cta="View details" showApprovedContact />
               ))}
             </ActivitySection>
 
@@ -933,6 +959,7 @@ function ProfileScreen({
       ...localProfile,
       name: localProfile.name.trim(),
       instagram: localProfile.instagram?.replace(/^@/, "").trim(),
+      whatsapp: normalizeWhatsapp(localProfile.whatsapp),
       comfortable_pace_seconds_per_km: paceRange.center,
       comfortable_pace_min_seconds_per_km: paceRange.min,
       comfortable_pace_max_seconds_per_km: paceRange.max
@@ -993,6 +1020,20 @@ function ProfileScreen({
               <Mail size={16} />
               <input value={email ?? ""} readOnly placeholder="you@email.com" />
             </span>
+          </label>
+
+          <label className="field-label">
+            WhatsApp optional
+            <span className="input-wrap">
+              <MessageCircle size={16} />
+              <input
+                value={localProfile.whatsapp ?? ""}
+                onChange={(event) => setLocalProfile((current) => ({ ...current, whatsapp: event.target.value }))}
+                inputMode="tel"
+                placeholder="+65 8123 4567"
+              />
+            </span>
+            <span className="privacy-note">{WHATSAPP_PRIVACY_COPY}</span>
           </label>
 
           <label className="field-label">
@@ -1178,12 +1219,14 @@ function ActivityRunCard({
   item,
   badge,
   note,
-  cta
+  cta,
+  showApprovedContact = false
 }: {
   item: RunParticipantActivity;
   badge: string;
   note: string;
   cta: string;
+  showApprovedContact?: boolean;
 }) {
   return (
     <article className="activity-card">
@@ -1194,6 +1237,7 @@ function ActivityRunCard({
       <h3>{item.run.title}</h3>
       <RunFactGrid run={item.run} />
       <p className="activity-note">{note}</p>
+      {showApprovedContact ? <ApprovedContact whatsapp={item.requesterWhatsapp} fallback="Your WhatsApp is shared with the host for coordination." /> : null}
     </article>
   );
 }
@@ -1220,6 +1264,14 @@ function HostedRunCard({
         <span>{hosted.pendingRequests.length} pending</span>
       </div>
 
+      {hosted.confirmedRequests.length ? (
+        <div className="approved-contact-list">
+          {hosted.confirmedRequests.map((request) => (
+            <ApprovedContact key={request.id} name={request.requesterName} whatsapp={request.requesterWhatsapp} fallback={`${request.requesterName} has not added WhatsApp yet.`} />
+          ))}
+        </div>
+      ) : null}
+
       {hosted.pendingRequests.length ? (
         <div className="incoming-list">
           {hosted.pendingRequests.map((request) => (
@@ -1239,6 +1291,18 @@ function HostedRunCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function ApprovedContact({ name, whatsapp, fallback }: { name?: string; whatsapp?: string; fallback: string }) {
+  return (
+    <div className="approved-contact">
+      <MessageCircle size={15} />
+      <span>
+        <strong>{name ? `${name} WhatsApp` : "Approved contact"}</strong>
+        {whatsapp ? <a href={whatsappHref(whatsapp)}>{whatsapp}</a> : <small>{fallback}</small>}
+      </span>
+    </div>
   );
 }
 
@@ -1967,28 +2031,33 @@ async function fetchMyRunActivity(supabase: ReturnType<typeof createClient>, cit
       .filter((run): run is CoreRun => Boolean(run)) ?? [];
 
   const hostedIds = hostedRuns.map((run) => run.id);
-  const requestResult = hostedIds.length
-    ? await supabase.from("run_participants").select("id, run_id, status, created_at").in("run_id", hostedIds)
+  let requestResult: { data: unknown[] | null; error: { message: string } | null } = hostedIds.length
+    ? await supabase.from("run_participants").select("id, run_id, status, created_at, requester_name, requester_whatsapp").in("run_id", hostedIds)
     : { data: [], error: null };
+
+  if (requestResult.error && isMissingContactSnapshotColumnError(requestResult.error.message) && hostedIds.length) {
+    requestResult = await supabase.from("run_participants").select("id, run_id, status, created_at").in("run_id", hostedIds);
+  }
 
   if (requestResult.error) {
     return {
       pending: [...localActivity.pending, ...participantItems.filter((item) => item.status === "requested")],
       confirmed: [...localActivity.confirmed, ...participantItems.filter((item) => item.status === "confirmed")],
-      hosted: [...localActivity.hosted, ...hostedRuns.map((run) => ({ run, confirmedCount: 0, pendingRequests: [] }))]
+      hosted: [...localActivity.hosted, ...hostedRuns.map((run) => ({ run, confirmedCount: 0, confirmedRequests: [], pendingRequests: [] }))]
     };
   }
 
   const hosted = hostedRuns.map((run) => {
     const requests =
       requestResult.data
-        ?.filter((row) => row.run_id === run.id)
+        ?.filter((row) => (row as Record<string, unknown>).run_id === run.id)
         .map((row) => participantRequestRowToActivity(row as Record<string, unknown>, run, profile))
         .filter((item): item is RunParticipantActivity => Boolean(item)) ?? [];
 
     return {
       run,
       confirmedCount: requests.filter((item) => item.status === "confirmed").length,
+      confirmedRequests: requests.filter((item) => item.status === "confirmed"),
       pendingRequests: requests.filter((item) => item.status === "requested")
     };
   });
@@ -2008,6 +2077,7 @@ function buildLocalActivity(localRuns: CoreRun[], participants: RunParticipantAc
     return {
       run,
       confirmedCount: requests.filter((item) => item.status === "confirmed").length,
+      confirmedRequests: requests.filter((item) => item.status === "confirmed"),
       pendingRequests: requests.filter((item) => item.status === "requested")
     };
   });
@@ -2030,7 +2100,8 @@ function participantRequestRowToActivity(row: Record<string, unknown>, run: Core
     id: String(row.id),
     run,
     status,
-    requesterName: profile.name || "Runner",
+    requesterName: firstString(row, ["requester_name", "requesterName"]) ?? profile.name ?? "Runner",
+    requesterWhatsapp: status === "confirmed" ? firstString(row, ["requester_whatsapp", "requesterWhatsapp"]) ?? profile.whatsapp : undefined,
     requesterPace: profile.comfortable_pace_seconds_per_km,
     requesterIntent: profileIntentToCoreIntent(profile.run_intents[0] ?? "easy_social"),
     createdAt: firstString(row, ["created_at"]) ?? new Date().toISOString()
@@ -2047,13 +2118,27 @@ async function insertParticipant(supabase: ReturnType<typeof createClient>, run:
     return true;
   }
 
-  const { error } = await supabase.from("run_participants").insert({
+  const participantPayload = {
     run_id: run.id,
     user_id: profileId,
-    status: "requested"
-  });
+    status: "requested",
+    requester_name: profile.name || "Runner",
+    requester_whatsapp: normalizeWhatsapp(profile.whatsapp) || null
+  };
+
+  const { error } = await supabase.from("run_participants").insert(participantPayload);
 
   if (!error) return true;
+
+  if (error.message.includes("requester_name") || error.message.includes("requester_whatsapp")) {
+    const legacyResult = await supabase.from("run_participants").insert({
+      run_id: run.id,
+      user_id: profileId,
+      status: "requested"
+    });
+
+    if (!legacyResult.error) return true;
+  }
 
   const fallback = await supabase.from("matches").insert({
     run_id: run.id,
@@ -2173,6 +2258,7 @@ function saveLocalParticipant(run: CoreRun, profile: OnboardingDraft, status: Pa
     run,
     status,
     requesterName: profile.name || "You",
+    requesterWhatsapp: normalizeWhatsapp(profile.whatsapp),
     requesterPace: profile.comfortable_pace_seconds_per_km,
     requesterIntent: profileIntentToCoreIntent(profile.run_intents[0] ?? "easy_social"),
     createdAt: new Date().toISOString()
@@ -2346,6 +2432,19 @@ function normalizePaceRange(profile: Pick<RunnerProfile, "comfortable_pace_secon
 
 function isMissingPaceRangeColumnError(message: string) {
   return message.includes("comfortable_pace_min_seconds_per_km") || message.includes("comfortable_pace_max_seconds_per_km");
+}
+
+function isMissingContactSnapshotColumnError(message: string) {
+  return message.includes("requester_name") || message.includes("requester_whatsapp");
+}
+
+function normalizeWhatsapp(value?: string) {
+  return value?.trim() ?? "";
+}
+
+function whatsappHref(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "#";
 }
 
 function initialsFromName(value: string) {
