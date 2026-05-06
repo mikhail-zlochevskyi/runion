@@ -79,7 +79,21 @@ type PostRunDraft = {
   distanceKm: number;
   intent: CoreIntent;
   locationName: string;
+  pickedLat: number | null;
+  pickedLng: number | null;
 };
+
+const CITY_BOUNDS: Record<CitySlug, { south: number; west: number; north: number; east: number }> = {
+  bcn: { south: 41.32, west: 2.05, north: 41.47, east: 2.23 },
+  sg: { south: 1.20, west: 103.59, north: 1.48, east: 104.05 },
+  par: { south: 48.815, west: 2.224, north: 48.902, east: 2.469 },
+  ber: { south: 52.339, west: 13.090, north: 52.675, east: 13.761 },
+};
+
+function isWithinCity(city: CitySlug, lat: number, lng: number) {
+  const b = CITY_BOUNDS[city];
+  return lat >= b.south && lat <= b.north && lng >= b.west && lng <= b.east;
+}
 
 const STORAGE_KEY = "runion.preview.profile";
 const LOCAL_RUNS_KEY = "runion.local.runs";
@@ -388,15 +402,24 @@ export function RunionMobileApp({ initialCity }: Props) {
     setAuthBusy(true);
     setAuthNotice("");
     const redirectTo = authSiteUrl();
-    const result =
-      authMode === "magic"
-        ? await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
-        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
 
-    if (result.error) {
-      setAuthNotice(result.error.message);
+    if (authMode === "magic") {
+      const result = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+      setAuthNotice(result.error ? result.error.message : "Magic link sent. Open it on this device to keep going.");
+      setAuthBusy(false);
+      return;
+    }
+
+    const signIn = await supabase.auth.signInWithPassword({ email, password });
+    if (!signIn.error) {
+      setAuthBusy(false);
+      return;
+    }
+    if (/invalid login credentials/i.test(signIn.error.message)) {
+      const signUp = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
+      setAuthNotice(signUp.error ? signUp.error.message : "Account created. Check your inbox if confirmation is required.");
     } else {
-      setAuthNotice(authMode === "magic" ? "Magic link sent. Open it on this device to keep going." : "Account created. Check your inbox if confirmation is required.");
+      setAuthNotice(signIn.error.message);
     }
     setAuthBusy(false);
   }
@@ -1363,14 +1386,47 @@ function PostRunScreen({
     paceSeconds: profile.comfortable_pace_seconds_per_km,
     distanceKm: 7,
     intent: "social",
-    locationName: ""
+    locationName: "",
+    pickedLat: null,
+    pickedLng: null,
   }));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [locationNameTouched, setLocationNameTouched] = useState(false);
+
+  // Reset pin when city changes — bounds differ.
+  useEffect(() => {
+    setDraft((current) => ({ ...current, pickedLat: null, pickedLng: null, locationName: "" }));
+    setLocationNameTouched(false);
+  }, [city]);
+
+  function handlePickLocation(lat: number, lng: number) {
+    setDraft((current) => ({ ...current, pickedLat: lat, pickedLng: lng }));
+    setError("");
+    if (locationNameTouched) return;
+    reverseGeocode(lat, lng).then((name) => {
+      if (!name) return;
+      setDraft((current) => (current.pickedLat === lat && current.pickedLng === lng && !locationNameTouched
+        ? { ...current, locationName: name }
+        : current));
+    });
+  }
 
   async function submitRun() {
-    if (!draft.startTime || !draft.locationName.trim()) {
-      setError("Add a time and location to post your run.");
+    if (!draft.startTime) {
+      setError("Add a time to post your run.");
+      return;
+    }
+    if (!draft.locationName.trim()) {
+      setError("Add a location name.");
+      return;
+    }
+    if (draft.pickedLat == null || draft.pickedLng == null) {
+      setError("Tap the map to pick a start location.");
+      return;
+    }
+    if (!isWithinCity(city, draft.pickedLat, draft.pickedLng)) {
+      setError(`Pick a valid start location in ${CITY_CONFIG[city].label}.`);
       return;
     }
     if (!profileId || profileId === "preview-user") {
@@ -1380,17 +1436,14 @@ function PostRunScreen({
 
     setBusy(true);
     setError("");
-    const cityConf = CITY_CONFIG[city];
-    // TODO(b): replace cityConf.center with the location-picker coords.
-    const [lat, lng] = cityConf.center;
     const result = await apiCreateRun(
       supabase,
       {
         city,
         title: titleFromIntent(draft.intent),
         locationName: draft.locationName.trim(),
-        lat,
-        lng,
+        lat: draft.pickedLat,
+        lng: draft.pickedLng,
         startTime: draft.startTime,
         paceSeconds: draft.paceSeconds,
         distanceKm: draft.distanceKm,
@@ -1469,10 +1522,26 @@ function PostRunScreen({
               })}
             </div>
           </div>
-          <label className="field-label">
-            Location
-            <input value={draft.locationName} onChange={(event) => setDraft((current) => ({ ...current, locationName: event.target.value }))} placeholder="Ciutadella Park" />
-          </label>
+          <div className="field-label location-picker-field">
+            <span>Location</span>
+            <PostLocationPicker
+              city={city}
+              pickedLat={draft.pickedLat}
+              pickedLng={draft.pickedLng}
+              onPick={handlePickLocation}
+            />
+            <input
+              value={draft.locationName}
+              onChange={(event) => {
+                setLocationNameTouched(true);
+                setDraft((current) => ({ ...current, locationName: event.target.value }));
+              }}
+              placeholder="e.g. Ciutadella Park"
+            />
+            <small className="picker-hint">
+              Tap the map to drop a pin. We&apos;ll auto-fill the name; edit to taste.
+            </small>
+          </div>
         </div>
 
         {error ? <p className="auth-notice">{error}</p> : null}
@@ -2439,6 +2508,119 @@ function participantLabel(name: string, count: number) {
 function formatRunStart(value: string) {
   const date = new Date(value);
   return date.toLocaleDateString("en-US", { weekday: "short" }) + " " + date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function PostLocationPicker({
+  city,
+  pickedLat,
+  pickedLng,
+  onPick,
+}: {
+  city: CitySlug;
+  pickedLat: number | null;
+  pickedLng: number | null;
+  onPick: (lat: number, lng: number) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const stateRef = useRef<{
+    map: import("leaflet").Map;
+    pin: import("leaflet").Marker | null;
+  } | null>(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+  const cityConf = CITY_CONFIG[city];
+
+  useEffect(() => {
+    let cancelled = false;
+    async function boot() {
+      if (!containerRef.current || stateRef.current) return;
+      const L = await import("leaflet");
+      if (cancelled || !containerRef.current) return;
+      const map = L.map(containerRef.current, {
+        center: cityConf.center,
+        zoom: cityConf.zoom,
+        zoomControl: false,
+        attributionControl: false,
+      });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
+        maxZoom: 19,
+      }).addTo(map);
+      map.on("click", (event) => {
+        const { lat, lng } = event.latlng;
+        onPickRef.current(lat, lng);
+      });
+      stateRef.current = { map, pin: null };
+      window.requestAnimationFrame(() => map.invalidateSize());
+    }
+    boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [cityConf.center, cityConf.zoom]);
+
+  // Re-center on city change.
+  useEffect(() => {
+    stateRef.current?.map.setView(cityConf.center, cityConf.zoom);
+  }, [cityConf.center, cityConf.zoom]);
+
+  // Render pin.
+  useEffect(() => {
+    let cancelled = false;
+    async function renderPin() {
+      const state = stateRef.current;
+      if (!state) return;
+      const L = await import("leaflet");
+      if (cancelled) return;
+      if (state.pin) {
+        state.pin.remove();
+        state.pin = null;
+      }
+      if (pickedLat != null && pickedLng != null) {
+        state.pin = L.marker([pickedLat, pickedLng], {
+          icon: L.divIcon({
+            className: "",
+            html: '<div class="picker-pin"><div class="picker-pin-dot"></div></div>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          }),
+          interactive: false,
+        }).addTo(state.map);
+        state.map.panTo([pickedLat, pickedLng]);
+      }
+    }
+    renderPin();
+    return () => {
+      cancelled = true;
+    };
+  }, [pickedLat, pickedLng]);
+
+  return <div ref={containerRef} className="post-run-map" />;
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as { name?: string; display_name?: string; address?: Record<string, string> };
+    const addr = data.address ?? {};
+    const candidate =
+      addr.attraction ||
+      addr.park ||
+      addr.leisure ||
+      addr.tourism ||
+      addr.road ||
+      addr.suburb ||
+      addr.neighbourhood ||
+      data.name ||
+      data.display_name?.split(",")[0];
+    return candidate?.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function defaultStartTime() {
