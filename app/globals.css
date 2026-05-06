@@ -1481,9 +1481,23 @@ button {
   border-color: rgba(244, 164, 92, 0.4);
 }
 
-.strava-tag {
+.socials-tag {
   font-weight: 600;
+}
+
+.socials-tag--strava {
   color: #fc4c02;
+}
+
+.socials-tag--instagram {
+  background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.socials-tag--garmin {
+  color: #00a4d6;
 }
 
 .matched-map-card {

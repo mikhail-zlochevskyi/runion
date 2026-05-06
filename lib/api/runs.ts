@@ -143,7 +143,7 @@ export type ParticipantRow = {
   status: ParticipantStatus;
   requesterName: string | null;
   requesterWhatsapp: string | null;
-  requesterStrava: string | null;
+  requesterSocials: string | null;
   createdAt: string;
 };
 
@@ -167,7 +167,7 @@ export async function fetchMyActivity(
   const [participantResult, hostedResult] = await Promise.all([
     supabase
       .from("run_participants")
-      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_strava, created_at, run:runs(${FETCH_COLUMNS})`)
+      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, created_at, run:runs(${FETCH_COLUMNS})`)
       .eq("user_id", profileId)
       .in("status", ["requested", "confirmed"]),
     supabase
@@ -205,7 +205,7 @@ export async function fetchMyActivity(
     const ids = hostedRuns.map((r) => r.id);
     const { data, error } = await supabase
       .from("run_participants")
-      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_strava, created_at")
+      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, created_at")
       .in("run_id", ids);
     if (!error && data) {
       hostedRequests = (data as Record<string, unknown>[])
@@ -266,7 +266,7 @@ function toParticipantRow(row: Record<string, unknown>): ParticipantRow | null {
     status,
     requesterName: stringFromValue(row.requester_name) ?? null,
     requesterWhatsapp: stringFromValue(row.requester_whatsapp) ?? null,
-    requesterStrava: stringFromValue(row.requester_strava) ?? null,
+    requesterSocials: stringFromValue(row.requester_socials) ?? null,
     createdAt: stringFromValue(row.created_at) ?? new Date().toISOString(),
   };
 }
@@ -278,14 +278,20 @@ export async function requestSpot(
     profileId: string;
     requesterName: string;
     requesterWhatsapp: string;
-    requesterStrava: string;
+    requesterSocials: string;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: "Supabase client unavailable." };
-  if (!args.requesterWhatsapp.trim() || !args.requesterStrava.trim()) {
+  if (!args.requesterWhatsapp.trim() || !args.requesterSocials.trim()) {
     return {
       ok: false,
-      error: "Add your WhatsApp and Strava in your profile before requesting a spot.",
+      error: "Add your WhatsApp and a social link (Strava, Instagram, or Garmin) in your profile before requesting a spot.",
+    };
+  }
+  if (!isValidSocialsUrl(args.requesterSocials)) {
+    return {
+      ok: false,
+      error: "Your social link must be a Strava, Instagram, or Garmin URL.",
     };
   }
 
@@ -295,7 +301,7 @@ export async function requestSpot(
     status: "requested",
     requester_name: args.requesterName,
     requester_whatsapp: args.requesterWhatsapp,
-    requester_strava: args.requesterStrava,
+    requester_socials: args.requesterSocials,
   };
   const { error } = await supabase.from("run_participants").insert(payload);
   if (!error) return { ok: true };
@@ -352,6 +358,30 @@ export function openSpots(run: Pick<RunRow, "maxGroupSize" | "currentSpots">) {
 
 export function paceLabel(run: Pick<RunRow, "paceMin" | "paceMax">) {
   return `${run.paceMin}-${run.paceMax}`;
+}
+
+export type SocialsPlatform = "strava" | "instagram" | "garmin";
+
+export function detectSocialsPlatform(url: string): SocialsPlatform | null {
+  const v = url.trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes("strava.com")) return "strava";
+  if (v.includes("instagram.com")) return "instagram";
+  if (v.includes("garmin.com")) return "garmin";
+  return null;
+}
+
+export function isValidSocialsUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (!detectSocialsPlatform(trimmed)) return false;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    new URL(withProtocol);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function dayLabel(startTime: string) {
