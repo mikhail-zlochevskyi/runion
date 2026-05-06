@@ -1,0 +1,9 @@
+[
+  {
+    "id": "c6100307-77f2-4da2-85f4-5e3800c6bd6c",
+    "user_id": "c0b7e753-1abc-4170-a59d-933db88a2b69",
+    "status": "requested",
+    "organiser_id": "c0b7e753-1abc-4170-a59d-933db88a2b69",
+    "note": "Self-request stale row, deleted after adding 0007_block_self_request migration"
+  }
+]

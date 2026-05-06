@@ -1796,6 +1796,10 @@ function MatchedRunsMap({
       setMapNotice("Sign in to request a spot.");
       return;
     }
+    if (run.organiserId === profileId) {
+      setMapNotice("That's your own run.");
+      return;
+    }
     const result = await apiRequestSpot(supabase, {
       runId: run.id,
       profileId,
@@ -2003,6 +2007,7 @@ function MatchedRunsMap({
                 run={run}
                 active={run.id === activeRunId}
                 requested={run.id === requestedRunId}
+                isHost={!!profileId && run.organiserId === profileId}
                 onSelect={() => selectRun(run)}
                 onRequest={() => requestSpot(run)}
               />
@@ -2061,12 +2066,14 @@ function MatchedRunCard({
   run,
   active,
   requested,
+  isHost,
   onSelect,
   onRequest
 }: {
   run: RunRow;
   active: boolean;
   requested: boolean;
+  isHost: boolean;
   onSelect: () => void;
   onRequest: () => void;
 }) {
@@ -2097,8 +2104,12 @@ function MatchedRunCard({
           <span className="view-pill">{run.locationName}</span>
         </span>
       </button>
-      <button className="detail-cta request-spot-btn" onClick={onRequest} disabled={requested || !spots}>
-        {requested ? "Spot requested" : spots === 1 ? "Request spot - 1 left" : "Request spot"}
+      <button
+        className="detail-cta request-spot-btn"
+        onClick={onRequest}
+        disabled={isHost || requested || !spots}
+      >
+        {isHost ? "You're hosting this run" : requested ? "Spot requested" : spots === 1 ? "Request spot - 1 left" : "Request spot"}
       </button>
       {requested ? <div className="success-state">Spot requested. We&apos;ll confirm your match soon.</div> : null}
     </article>
