@@ -11,6 +11,7 @@ import { authSiteUrl } from "@/lib/auth-site-url";
 import { CITY_CONFIG } from "@/lib/config";
 import {
   cancelOwnRequest as apiCancelOwnRequest,
+  cancelRun as apiCancelRun,
   createRun as apiCreateRun,
   detectSocialsPlatform,
   fetchMyActivity as apiFetchMyActivity,
@@ -20,8 +21,10 @@ import {
   paceLabel as runPaceLabel,
   requestSpot as apiRequestSpot,
   setRequestStatus as apiSetRequestStatus,
+  wrapUpRun as apiWrapUpRun,
   dayLabel as runDayLabel,
   timeLabel as runTimeLabel,
+  type HostOutcome,
   type ParticipantRow,
   type ParticipantStatus as ApiParticipantStatus,
   type RunRow,
@@ -931,11 +934,13 @@ function RunsFeed({
 }) {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
-  const [activity, setActivity] = useState<{ pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] }>({
+  const [activity, setActivity] = useState<{ pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }>({
     pending: [],
     confirmed: [],
-    hosted: []
+    hosted: [],
+    pastHosted: []
   });
+  const [recapTarget, setRecapTarget] = useState<HostedRunActivity | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -944,7 +949,7 @@ function RunsFeed({
       setLoading(true);
       if (!profileId || profileId === "preview-user") {
         if (mounted) {
-          setActivity({ pending: [], confirmed: [], hosted: [] });
+          setActivity({ pending: [], confirmed: [], hosted: [], pastHosted: [] });
           setLoading(false);
         }
         return;
@@ -1021,6 +1026,27 @@ function RunsFeed({
     }
   }
 
+  async function handleWrapUp(hosted: HostedRunActivity, outcomes: { participantId: string; outcome: HostOutcome; runAgain: boolean }[]) {
+    const result = await apiWrapUpRun(supabase, { runId: hosted.run.id, outcomes });
+    if (result.ok) {
+      setRecapTarget(null);
+      await refreshActivity("Run wrapped up.");
+    } else {
+      setToast(result.error || "Couldn't wrap up the run. Try again.");
+    }
+  }
+
+  async function handleCancel(hosted: HostedRunActivity) {
+    const reason = window.prompt("Reason for cancelling? (weather, no-shows, can't make it, ...)") ?? "";
+    if (!reason.trim()) return;
+    const result = await apiCancelRun(supabase, { runId: hosted.run.id, reason: reason.trim() });
+    if (result.ok) {
+      await refreshActivity("Run cancelled.");
+    } else {
+      setToast(result.error || "Couldn't cancel the run. Try again.");
+    }
+  }
+
   return (
     <main className="app-shell matches-shell runs-shell">
       <BrandBar onProfile={onProfile} />
@@ -1059,9 +1085,24 @@ function RunsFeed({
                   hosted={hosted}
                   onApprove={(request) => updateRequestStatus(request, "confirmed")}
                   onDecline={(request) => updateRequestStatus(request, "declined")}
+                  onWrapUp={(h) => setRecapTarget(h)}
+                  onCancel={handleCancel}
                 />
               ))}
             </ActivitySection>
+
+            {activity.pastHosted.length ? (
+              <ActivitySection title="Past runs" empty="">
+                {activity.pastHosted.map((hosted) => (
+                  <HostedRunCard
+                    key={hosted.run.id}
+                    hosted={hosted}
+                    onApprove={(request) => updateRequestStatus(request, "confirmed")}
+                    onDecline={(request) => updateRequestStatus(request, "declined")}
+                  />
+                ))}
+              </ActivitySection>
+            ) : null}
           </div>
         ) : (
           <section className="core-empty-state my-runs-empty">
@@ -1074,6 +1115,13 @@ function RunsFeed({
           </section>
         )}
       </section>
+      {recapTarget ? (
+        <RecapModal
+          hosted={recapTarget}
+          onClose={() => setRecapTarget(null)}
+          onSave={(outcomes) => handleWrapUp(recapTarget, outcomes)}
+        />
+      ) : null}
       <RunionTabNav active="runs" onMap={onOpenMap} onPost={onPostRun} onRuns={() => undefined} />
     </main>
   );
@@ -1416,23 +1464,37 @@ function ActivityRunCard({
 function HostedRunCard({
   hosted,
   onApprove,
-  onDecline
+  onDecline,
+  onWrapUp,
+  onCancel
 }: {
   hosted: HostedRunActivity;
   onApprove: (request: RunParticipantActivity) => void;
   onDecline: (request: RunParticipantActivity) => void;
+  onWrapUp?: (hosted: HostedRunActivity) => void;
+  onCancel?: (hosted: HostedRunActivity) => void;
 }) {
+  const isPast = hosted.run.status === "completed" || hosted.run.status === "expired";
+  const startTimeMs = new Date(hosted.run.startTime).getTime();
+  const hasStarted = !Number.isNaN(startTimeMs) && Date.now() >= startTimeMs;
+  const badge = hosted.run.status === "completed" ? "Completed"
+    : hosted.run.status === "expired" ? "Cancelled"
+    : "Hosting";
   return (
-    <article className="activity-card hosted-card">
+    <article className={`activity-card hosted-card${isPast ? " hosted-card--past" : ""}`}>
       <div className="activity-card-head">
-        <span className="status-badge host">Hosting</span>
-        {hosted.pendingRequests.length ? <button className="text-btn">Review requests</button> : null}
+        <span className={`status-badge host${isPast ? " status-badge--past" : ""}`}>{badge}</span>
+        {!isPast && onWrapUp && hasStarted ? (
+          <button className="text-btn text-btn--accent" onClick={() => onWrapUp(hosted)}>Wrap up</button>
+        ) : !isPast && onCancel && !hasStarted ? (
+          <button className="text-btn" onClick={() => onCancel(hosted)}>Cancel run</button>
+        ) : null}
       </div>
       <h3>{hosted.run.title}</h3>
       <RunFactGrid run={hosted.run} />
       <div className="host-counts">
         <span>{hosted.confirmedCount} confirmed</span>
-        <span>{hosted.pendingRequests.length} pending</span>
+        {!isPast ? <span>{hosted.pendingRequests.length} pending</span> : null}
       </div>
 
       {hosted.confirmedRequests.length ? (
@@ -1466,6 +1528,89 @@ function HostedRunCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function RecapModal({
+  hosted,
+  onClose,
+  onSave,
+}: {
+  hosted: HostedRunActivity;
+  onClose: () => void;
+  onSave: (outcomes: { participantId: string; outcome: HostOutcome; runAgain: boolean }[]) => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, { outcome: HostOutcome; runAgain: boolean }>>(() =>
+    Object.fromEntries(hosted.confirmedRequests.map((r) => [r.id, { outcome: "showed_up" as HostOutcome, runAgain: false }]))
+  );
+  const [busy, setBusy] = useState(false);
+
+  function setOutcome(id: string, outcome: HostOutcome) {
+    setDraft((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { outcome, runAgain: false }), outcome } }));
+  }
+  function toggleRunAgain(id: string) {
+    setDraft((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { outcome: "showed_up", runAgain: false }), runAgain: !(prev[id]?.runAgain ?? false) } }));
+  }
+
+  async function save() {
+    setBusy(true);
+    const outcomes = hosted.confirmedRequests.map((r) => ({
+      participantId: r.id,
+      outcome: draft[r.id]?.outcome ?? ("showed_up" as HostOutcome),
+      runAgain: draft[r.id]?.runAgain ?? false,
+    }));
+    await onSave(outcomes);
+    setBusy(false);
+  }
+
+  return (
+    <div className="recap-backdrop" role="dialog" aria-label="Wrap up run">
+      <section className="recap-panel">
+        <header>
+          <p className="modal-eyebrow">Wrap up</p>
+          <h2>{hosted.run.title}</h2>
+          <p>How did it go?</p>
+        </header>
+        {hosted.confirmedRequests.length === 0 ? (
+          <p className="recap-empty">No confirmed runners. Tap save to close out the run.</p>
+        ) : (
+          <div className="recap-list">
+            {hosted.confirmedRequests.map((r) => {
+              const d = draft[r.id] ?? { outcome: "showed_up" as HostOutcome, runAgain: false };
+              return (
+                <div className="recap-row" key={r.id}>
+                  <strong>{r.requesterName}</strong>
+                  <div className="recap-outcomes" role="group">
+                    {([
+                      { value: "showed_up" as HostOutcome, label: "Showed up" },
+                      { value: "no_show" as HostOutcome, label: "No-show" },
+                      { value: "skipped" as HostOutcome, label: "Skip" },
+                    ]).map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        className={`recap-pill${d.outcome === o.value ? " recap-pill--active" : ""}`}
+                        onClick={() => setOutcome(r.id, o.value)}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="recap-toggle">
+                    <input type="checkbox" checked={d.runAgain} onChange={() => toggleRunAgain(r.id)} />
+                    <span>Run again with {r.requesterName.split(" ")[0]}</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="recap-actions">
+          <button className="secondary-cta" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary-cta" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save & close"}</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -2298,8 +2443,8 @@ function OptionStack({
 }
 
 
-function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] }) {
-  return activity.pending.length > 0 || activity.confirmed.length > 0 || activity.hosted.length > 0;
+function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }) {
+  return activity.pending.length > 0 || activity.confirmed.length > 0 || activity.hosted.length > 0 || activity.pastHosted.length > 0;
 }
 
 function titleFromIntent(intent: CoreIntent) {
@@ -2386,10 +2531,10 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
 function adaptMyActivity(
   raw: import("@/lib/api/runs").MyActivity,
   profile: OnboardingDraft
-): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[] } {
+): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] } {
   const pending = raw.pending.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
   const confirmed = raw.confirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
-  const hosted: HostedRunActivity[] = raw.hosted.map(({ run, pending: pendingRows, confirmed: confirmedRows }) => {
+  const adaptHosted = ({ run, pending: pendingRows, confirmed: confirmedRows }: import("@/lib/api/runs").HostedBucket): HostedRunActivity => {
     const core = runRowToCoreRun(run);
     return {
       run: core,
@@ -2397,8 +2542,10 @@ function adaptMyActivity(
       confirmedRequests: confirmedRows.map((p) => participantRowToActivity(p, core, profile)),
       pendingRequests: pendingRows.map((p) => participantRowToActivity(p, core, profile)),
     };
-  });
-  return { pending, confirmed, hosted };
+  };
+  const hosted = raw.hosted.map(adaptHosted);
+  const pastHosted = raw.pastHosted.map(adaptHosted);
+  return { pending, confirmed, hosted, pastHosted };
 }
 
 function PostLocationPicker({

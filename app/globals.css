@@ -1449,6 +1449,120 @@ button {
   box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);
 }
 
+.text-btn--accent {
+  color: var(--sun);
+  font-weight: 600;
+}
+
+.hosted-card--past {
+  opacity: 0.78;
+}
+
+.status-badge--past {
+  background: rgba(243, 235, 217, 0.08);
+  color: var(--muted);
+}
+
+.recap-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: end center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  padding: 16px;
+}
+
+.recap-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #2e3026 0%, #221c12 60%, #1a140d 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recap-panel header h2 {
+  margin: 4px 0 4px;
+  color: var(--cream);
+  font-family: var(--font-fraunces), serif;
+  font-style: italic;
+  font-size: 1.4rem;
+}
+
+.recap-panel header p:last-child {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.recap-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.recap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.recap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.03);
+}
+
+.recap-outcomes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.recap-pill {
+  flex: 1 1 auto;
+  min-width: 86px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(243, 235, 217, 0.04);
+  color: var(--cream);
+  font-size: 0.78rem;
+}
+
+.recap-pill--active {
+  border-color: var(--terracotta);
+  background: var(--terracotta);
+  color: var(--cream);
+}
+
+.recap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.recap-toggle input {
+  accent-color: var(--terracotta);
+}
+
+.recap-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .requester-socials {
   display: flex;
   flex-wrap: wrap;

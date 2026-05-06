@@ -141,6 +141,8 @@ export async function createRun(
 
 export type ParticipantStatus = "requested" | "confirmed" | "declined";
 
+export type HostOutcome = "showed_up" | "no_show" | "skipped";
+
 export type ParticipantRow = {
   id: string;
   runId: string;
@@ -149,38 +151,44 @@ export type ParticipantRow = {
   requesterName: string | null;
   requesterWhatsapp: string | null;
   requesterSocials: string | null;
+  hostOutcome: HostOutcome | null;
+  hostRunAgain: boolean | null;
+  hostReviewedAt: string | null;
   createdAt: string;
+};
+
+export type HostedBucket = {
+  run: RunRow;
+  pending: ParticipantRow[];
+  confirmed: ParticipantRow[];
 };
 
 export type MyActivity = {
   pending: { participant: ParticipantRow; run: RunRow }[];
   confirmed: { participant: ParticipantRow; run: RunRow }[];
-  hosted: {
-    run: RunRow;
-    pending: ParticipantRow[];
-    confirmed: ParticipantRow[];
-  }[];
+  hosted: HostedBucket[];
+  pastHosted: HostedBucket[];
 };
 
 export async function fetchMyActivity(
   supabase: SB | null,
   args: { profileId: string }
 ): Promise<MyActivity> {
-  if (!supabase) return { pending: [], confirmed: [], hosted: [] };
+  if (!supabase) return { pending: [], confirmed: [], hosted: [], pastHosted: [] };
   await sweepStaleRuns(supabase);
   const { profileId } = args;
 
   const [participantResult, hostedResult] = await Promise.all([
     supabase
       .from("run_participants")
-      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, created_at, run:runs(${FETCH_COLUMNS})`)
+      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, created_at, run:runs(${FETCH_COLUMNS})`)
       .eq("user_id", profileId)
       .in("status", ["requested", "confirmed"]),
     supabase
       .from("runs")
       .select(FETCH_COLUMNS)
       .eq("organiser_id", profileId)
-      .in("status", ["active", "full", "completed"])
+      .in("status", ["active", "full", "completed", "expired"])
       .order("start_time", { ascending: false, nullsFirst: false }),
   ]);
 
@@ -212,7 +220,7 @@ export async function fetchMyActivity(
     const ids = hostedRuns.map((r) => r.id);
     const { data, error } = await supabase
       .from("run_participants")
-      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, created_at")
+      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, created_at")
       .in("run_id", ids);
     if (!error && data) {
       hostedRequests = (data as Record<string, unknown>[])
@@ -221,7 +229,7 @@ export async function fetchMyActivity(
     }
   }
 
-  const hosted = hostedRuns.map((run) => {
+  const hostedAll = hostedRuns.map((run) => {
     const requests = hostedRequests.filter((r) => r.runId === run.id);
     return {
       run,
@@ -230,7 +238,56 @@ export async function fetchMyActivity(
     };
   });
 
-  return { pending, confirmed, hosted };
+  const isPast = (s: string) => s === "completed" || s === "expired";
+  const hosted = hostedAll.filter((h) => !isPast(h.run.status));
+  const pastHosted = hostedAll.filter((h) => isPast(h.run.status));
+
+  return { pending, confirmed, hosted, pastHosted };
+}
+
+export async function wrapUpRun(
+  supabase: SB | null,
+  args: {
+    runId: string;
+    outcomes: { participantId: string; outcome: HostOutcome; runAgain: boolean }[];
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  const reviewedAt = new Date().toISOString();
+  for (const o of args.outcomes) {
+    const { error } = await supabase
+      .from("run_participants")
+      .update({
+        host_outcome: o.outcome,
+        host_run_again: o.runAgain,
+        host_reviewed_at: reviewedAt,
+      })
+      .eq("id", o.participantId);
+    if (error) return { ok: false, error: error.message };
+  }
+  const { error } = await supabase
+    .from("runs")
+    .update({ status: "completed", completed_at: reviewedAt })
+    .eq("id", args.runId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function cancelRun(
+  supabase: SB | null,
+  args: { runId: string; reason: string }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  const { error } = await supabase
+    .from("runs")
+    .update({
+      status: "expired",
+      cancelled_at: new Date().toISOString(),
+      cancel_reason: args.reason,
+    })
+    .eq("id", args.runId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 export async function setRequestStatus(
@@ -274,6 +331,12 @@ function toParticipantRow(row: Record<string, unknown>): ParticipantRow | null {
     requesterName: stringFromValue(row.requester_name) ?? null,
     requesterWhatsapp: stringFromValue(row.requester_whatsapp) ?? null,
     requesterSocials: stringFromValue(row.requester_socials) ?? null,
+    hostOutcome: (() => {
+      const v = stringFromValue(row.host_outcome);
+      return v === "showed_up" || v === "no_show" || v === "skipped" ? v : null;
+    })(),
+    hostRunAgain: typeof row.host_run_again === "boolean" ? row.host_run_again : null,
+    hostReviewedAt: stringFromValue(row.host_reviewed_at) ?? null,
     createdAt: stringFromValue(row.created_at) ?? new Date().toISOString(),
   };
 }
