@@ -884,6 +884,34 @@ function RunsFeed({
     };
   }, [city, profile, profileId, supabase]);
 
+  // Subscribe to live updates affecting this user's activity.
+  useEffect(() => {
+    if (!supabase || !profileId || profileId === "preview-user") return;
+    const refetch = async () => {
+      const raw = await apiFetchMyActivity(supabase, { profileId });
+      setActivity(adaptMyActivity(raw, profile));
+    };
+    const myRequests = supabase
+      .channel(`run_participants:user:${profileId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "run_participants", filter: `user_id=eq.${profileId}` },
+        refetch
+      )
+      .subscribe();
+    const myHostedRuns = supabase
+      .channel(`runs:organiser:${profileId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "runs", filter: `organiser_id=eq.${profileId}` },
+        refetch
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(myRequests);
+      supabase.removeChannel(myHostedRuns);
+    };
+  }, [supabase, profileId, profile]);
 
   async function refreshActivity(message?: string) {
     if (!profileId || profileId === "preview-user") return;
@@ -1646,6 +1674,23 @@ function MatchedRunsMap({
       cancelled = true;
     };
   }, [supabase, city, locationStatus, userLocation, refreshKey]);
+
+  // Subscribe to live changes for the current city. Best-effort: silent if
+  // realtime isn't configured or the channel errors.
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel(`runs:${city}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "runs", filter: `city=eq.${city}` },
+        () => setRefreshKey((k) => k + 1)
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, city]);
 
   useEffect(() => {
     setActiveRunId((current) => (current && filteredRuns.some((run) => run.id === current) ? current : filteredRuns[0]?.id ?? ""));
