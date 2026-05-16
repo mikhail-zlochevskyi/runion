@@ -569,8 +569,8 @@ export function RunionMobileApp({ initialCity }: Props) {
         <section className="entry-panel">
           <div className="entry-copy">
             <p className="modal-eyebrow">Runion · {city.toUpperCase()}</p>
-            <h1>Find 2-3 runners at your pace. No random groups.</h1>
-            <p>Answer a few quick questions and see small runs that fit your rhythm this week.</p>
+            <h1>Run with the neighbour you haven&apos;t met.</h1>
+            <p>Curated 1-on-1 and small-group runs, ten minutes from your door.</p>
           </div>
 
           <div className="auth-panel">
