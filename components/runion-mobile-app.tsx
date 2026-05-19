@@ -502,7 +502,11 @@ export function RunionMobileApp({ initialCity }: Props) {
   async function completeOnboarding() {
     const cleanedWhatsapp = normalizeWhatsapp(draft.whatsapp);
     const cleanedSocials = draft.socials_url?.trim() ?? "";
-    if (cleanedSocials && !isValidSocialsUrl(cleanedSocials)) {
+    if (!cleanedSocials) {
+      setAuthNotice("Add a Strava, Instagram, or Garmin link so other runners know who they're meeting.");
+      return;
+    }
+    if (!isValidSocialsUrl(cleanedSocials)) {
       setAuthNotice("Social link must be a Strava, Instagram, or Garmin URL.");
       return;
     }
