@@ -46,7 +46,7 @@ declare
   joiner uuid;
   pair_a uuid;
   pair_b uuid;
-  both boolean;
+  mutual boolean;
 begin
   select organiser_id into organiser from public.runs where id = new.run_id;
   joiner := new.user_id;
@@ -55,9 +55,9 @@ begin
   end if;
   pair_a := least(organiser, joiner);
   pair_b := greatest(organiser, joiner);
-  both := coalesce(new.host_run_again, false) and coalesce(new.joiner_run_again, false);
+  mutual := coalesce(new.host_run_again, false) and coalesce(new.joiner_run_again, false);
 
-  if both then
+  if mutual then
     insert into public.runner_affinity (user_a, user_b, run_id)
     values (pair_a, pair_b, new.run_id)
     on conflict do nothing;
