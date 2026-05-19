@@ -1150,6 +1150,7 @@ function RunsFeed({
                   key={hosted.run.id}
                   hosted={hosted}
                   stats={stats}
+                  hostName={profile.name}
                   onApprove={(request) => updateRequestStatus(request, "confirmed")}
                   onDecline={(request) => updateRequestStatus(request, "declined")}
                   onWrapUp={(h) => setRecapTarget(h)}
@@ -1178,6 +1179,7 @@ function RunsFeed({
                     key={hosted.run.id}
                     hosted={hosted}
                     stats={stats}
+                    hostName={profile.name}
                     onApprove={(request) => updateRequestStatus(request, "confirmed")}
                     onDecline={(request) => updateRequestStatus(request, "declined")}
                   />
@@ -1621,6 +1623,7 @@ function JoinedPastCard({
 function HostedRunCard({
   hosted,
   stats,
+  hostName,
   onApprove,
   onDecline,
   onWrapUp,
@@ -1628,6 +1631,7 @@ function HostedRunCard({
 }: {
   hosted: HostedRunActivity;
   stats?: Record<string, UserStats>;
+  hostName?: string;
   onApprove: (request: RunParticipantActivity) => void;
   onDecline: (request: RunParticipantActivity) => void;
   onWrapUp?: (hosted: HostedRunActivity) => void;
@@ -1662,7 +1666,13 @@ function HostedRunCard({
             <div key={request.id} className="approved-contact">
               <strong>{request.requesterName}</strong>
               <StatsBadge stats={stats?.[request.userId]} />
-              <RequesterSocials whatsapp={request.requesterWhatsapp} socials={request.requesterSocials} />
+              <RequesterSocials
+                whatsapp={request.requesterWhatsapp}
+                socials={request.requesterSocials}
+                run={hosted.run}
+                senderName={hostName}
+                recipientName={request.requesterName}
+              />
             </div>
           ))}
         </div>
@@ -1775,7 +1785,19 @@ function RecapModal({
   );
 }
 
-function RequesterSocials({ whatsapp, socials }: { whatsapp?: string; socials?: string }) {
+function RequesterSocials({
+  whatsapp,
+  socials,
+  run,
+  senderName,
+  recipientName,
+}: {
+  whatsapp?: string;
+  socials?: string;
+  run?: CoreRun;
+  senderName?: string;
+  recipientName?: string;
+}) {
   if (!whatsapp && !socials) return null;
   const platform = socials ? detectSocialsPlatform(socials) : null;
   const platformLabel: Record<string, string> = {
@@ -1784,10 +1806,11 @@ function RequesterSocials({ whatsapp, socials }: { whatsapp?: string; socials?: 
     garmin: "Garmin",
   };
   const socialHref = socials ? (socials.startsWith("http") ? socials : `https://${socials}`) : "";
+  const waText = whatsapp && run ? buildRunWhatsappMessage({ run, senderName, recipientName }) : undefined;
   return (
     <div className="requester-socials">
       {whatsapp ? (
-        <a className="requester-social" href={whatsappHref(whatsapp)} target="_blank" rel="noreferrer">
+        <a className="requester-social" href={whatsappHref(whatsapp, waText)} target="_blank" rel="noreferrer">
           <MessageCircle size={13} />
           {whatsapp}
         </a>
@@ -3164,9 +3187,39 @@ function normalizeWhatsapp(value?: string) {
   return value?.trim() ?? "";
 }
 
-function whatsappHref(value: string) {
+function whatsappHref(value: string, text?: string) {
   const digits = value.replace(/\D/g, "");
-  return digits ? `https://wa.me/${digits}` : "#";
+  if (!digits) return "#";
+  return text ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : `https://wa.me/${digits}`;
+}
+
+function buildRunWhatsappMessage({
+  run,
+  senderName,
+  recipientName,
+}: {
+  run: CoreRun;
+  senderName?: string;
+  recipientName?: string;
+}) {
+  const recipientFirst = recipientName?.split(" ")[0];
+  const senderFirst = senderName?.split(" ")[0];
+  const greeting = recipientFirst ? `Hi ${recipientFirst},` : "Hi,";
+  const intro = senderFirst
+    ? `${greeting} it's ${senderFirst} from runion 👋`
+    : `${greeting} reaching out via runion 👋`;
+  const signOff = senderFirst ? ` — ${senderFirst}` : "";
+  const lines = [
+    intro,
+    "",
+    `Confirming our ${run.title || "run"}:`,
+    `📍 ${run.locationName}`,
+    `🗓 ${runDayLabel(run.startTime)} ${runTimeLabel(run.startTime)}`,
+    `🏃 ${run.distanceKm} km · ${runPaceLabel(run)}/km`,
+    "",
+    `See you there!${signOff}`,
+  ];
+  return lines.join("\n");
 }
 
 function initialsFromName(value: string) {
