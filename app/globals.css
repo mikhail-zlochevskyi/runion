@@ -1449,6 +1449,89 @@ button {
   box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);
 }
 
+.avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar-picker-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 1px dashed rgba(243, 235, 217, 0.28);
+  background: rgba(243, 235, 217, 0.04);
+  color: var(--muted);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.avatar-picker-button:hover {
+  border-color: rgba(244, 164, 92, 0.55);
+  color: var(--sun);
+}
+
+.avatar-picker-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.avatar-picker-button--filled {
+  border-style: solid;
+  border-color: var(--sun);
+}
+
+.avatar-picker-button .photo-avatar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-initials {
+  font-family: var(--font-fraunces), serif;
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--cream);
+}
+
+.avatar-picker-cta {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  background: rgba(26, 20, 13, 0.85);
+  color: var(--cream);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+.avatar-picker-button--filled .avatar-picker-cta {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.avatar-picker-button--filled:hover .avatar-picker-cta {
+  opacity: 1;
+}
+
+.avatar-picker-error {
+  color: var(--rose);
+  font-size: 0.78rem;
+}
+
+.profile-identity--picker {
+  align-items: center;
+}
+
 .text-btn--accent {
   color: var(--sun);
   font-weight: 600;

@@ -30,6 +30,7 @@ import {
   type RunRow,
 } from "@/lib/api/runs";
 import { createClient } from "@/lib/supabase/client";
+import { uploadAvatar } from "@/lib/uploadAvatar";
 
 type Props = {
   initialCity: CitySlug;
@@ -352,7 +353,10 @@ export function RunionMobileApp({ initialCity }: Props) {
   async function saveProfileChanges(profile: OnboardingDraft) {
     const cleanedWhatsapp = normalizeWhatsapp(profile.whatsapp);
     const cleanedSocials = profile.socials_url?.trim() ?? "";
-    if (cleanedSocials && !isValidSocialsUrl(cleanedSocials)) {
+    if (!cleanedSocials) {
+      return { ok: false, message: "Add a Strava, Instagram, or Garmin link so other runners know who they're meeting." };
+    }
+    if (!isValidSocialsUrl(cleanedSocials)) {
       return { ok: false, message: "Social link must be a Strava, Instagram, or Garmin URL." };
     }
     const paceRange = normalizePaceRange(profile);
@@ -636,7 +640,7 @@ export function RunionMobileApp({ initialCity }: Props) {
             <small>{step + 1}/6</small>
           </div>
 
-          <OnboardingStep step={step} draft={draft} setDraft={setDraft} />
+          <OnboardingStep step={step} draft={draft} setDraft={setDraft} profileId={profileId} supabase={supabase} />
 
           {authNotice ? <p className="auth-notice">{authNotice}</p> : null}
 
@@ -670,6 +674,8 @@ export function RunionMobileApp({ initialCity }: Props) {
       <ProfileScreen
         profile={draft}
         email={profileEmail}
+        profileId={profileId}
+        supabase={supabase}
         onProfileChange={setDraft}
         onBack={() => router.push(`/runs#${city}`)}
         onMap={() => router.push(`/map#${city}`)}
@@ -713,11 +719,15 @@ export function RunionMobileApp({ initialCity }: Props) {
 function OnboardingStep({
   step,
   draft,
-  setDraft
+  setDraft,
+  profileId,
+  supabase
 }: {
   step: number;
   draft: OnboardingDraft;
   setDraft: Dispatch<SetStateAction<OnboardingDraft>>;
+  profileId?: string;
+  supabase: ReturnType<typeof createClient>;
 }) {
   if (step === 0) {
     return (
@@ -863,17 +873,12 @@ function OnboardingStep({
   return (
     <div className="step-card">
       <Question title="Your trust profile" detail="Just enough for runners to recognize who they're meeting." />
-      {/* TODO: Wire this to the existing Supabase Storage upload flow once profile photos are enabled. */}
-      <button className="photo-placeholder" type="button">
-        {draft.profile_photo_url ? (
-          // Google OAuth avatars are remote provider images; keep this direct until profile photo storage is wired.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="photo-avatar" src={draft.profile_photo_url} alt="" referrerPolicy="no-referrer" />
-        ) : (
-          <Camera size={20} />
-        )}
-        <span>{draft.profile_photo_url ? "Photo from your account" : "Add photo later"}</span>
-      </button>
+      <AvatarPicker
+        photoUrl={draft.profile_photo_url}
+        profileId={profileId}
+        supabase={supabase}
+        onChange={(url) => setDraft((current) => ({ ...current, profile_photo_url: url }))}
+      />
       <label className="field-label">
         Name
         <span className="input-wrap">
@@ -1130,6 +1135,8 @@ function RunsFeed({
 function ProfileScreen({
   profile,
   email,
+  profileId,
+  supabase,
   onProfileChange,
   onBack,
   onMap,
@@ -1140,6 +1147,8 @@ function ProfileScreen({
 }: {
   profile: OnboardingDraft;
   email?: string;
+  profileId?: string;
+  supabase: ReturnType<typeof createClient>;
   onProfileChange: Dispatch<SetStateAction<OnboardingDraft>>;
   onBack: () => void;
   onMap: () => void;
@@ -1198,19 +1207,20 @@ function ProfileScreen({
           <p>Keep your running preferences up to date.</p>
         </header>
 
-        <section className="profile-identity" aria-label="Profile identity">
-          <div className="profile-picture" aria-hidden="true">
-            {localProfile.profile_photo_url ? (
-              // Google OAuth avatars come from the identity provider; keep this direct until uploads exist.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={localProfile.profile_photo_url} alt="" referrerPolicy="no-referrer" />
-            ) : (
-              <span>{initialsFromName(localProfile.name || email || "Runner")}</span>
-            )}
-          </div>
+        <section className="profile-identity profile-identity--picker" aria-label="Profile identity">
+          <AvatarPicker
+            photoUrl={localProfile.profile_photo_url}
+            profileId={profileId}
+            supabase={supabase}
+            onChange={(url) => {
+              setLocalProfile((current) => ({ ...current, profile_photo_url: url }));
+              onProfileChange((current) => ({ ...current, profile_photo_url: url }));
+            }}
+            fallbackInitials={initialsFromName(localProfile.name || email || "Runner")}
+          />
           <div>
             <strong>{localProfile.name || "Runner"}</strong>
-            <span>{localProfile.profile_photo_url ? "Photo from Google account" : "No profile photo yet"}</span>
+            <span>{localProfile.profile_photo_url ? "Tap photo to change" : "Tap to add a photo"}</span>
           </div>
         </section>
 
@@ -2553,6 +2563,75 @@ function adaptMyActivity(
   const hosted = raw.hosted.map(adaptHosted);
   const pastHosted = raw.pastHosted.map(adaptHosted);
   return { pending, confirmed, hosted, pastHosted };
+}
+
+function AvatarPicker({
+  photoUrl,
+  profileId,
+  supabase,
+  onChange,
+  fallbackInitials,
+}: {
+  photoUrl?: string;
+  profileId?: string;
+  supabase: ReturnType<typeof createClient>;
+  onChange: (url: string) => void;
+  fallbackInitials?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    if (!profileId || profileId === "preview-user" || !supabase) {
+      setError("Sign in to upload a photo.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { url } = await uploadAvatar(supabase, profileId, file);
+      onChange(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="avatar-picker">
+      <button
+        type="button"
+        className={`avatar-picker-button${photoUrl ? " avatar-picker-button--filled" : ""}`}
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+      >
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="photo-avatar" src={photoUrl} alt="" referrerPolicy="no-referrer" />
+        ) : fallbackInitials ? (
+          <span className="avatar-initials">{fallbackInitials}</span>
+        ) : (
+          <Camera size={22} />
+        )}
+        <span className="avatar-picker-cta">
+          {busy ? "Uploading…" : photoUrl ? "Change photo" : "Add a photo"}
+        </span>
+      </button>
+      {error ? <span className="avatar-picker-error">{error}</span> : null}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        style={{ display: "none" }}
+        onChange={(event) => handleFile(event.target.files?.[0] ?? undefined)}
+      />
+    </div>
+  );
 }
 
 function PostLocationPicker({
