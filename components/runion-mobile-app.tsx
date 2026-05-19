@@ -475,11 +475,34 @@ export function RunionMobileApp({ initialCity }: Props) {
       setAuthBusy(false);
       return;
     }
-    if (/invalid login credentials/i.test(signIn.error.message)) {
-      const signUp = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
-      setAuthNotice(signUp.error ? signUp.error.message : "Account created. Check your inbox if confirmation is required.");
-    } else {
+    if (!/invalid login credentials/i.test(signIn.error.message)) {
       setAuthNotice(signIn.error.message);
+      setAuthBusy(false);
+      return;
+    }
+
+    const signUp = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
+    if (signUp.error) {
+      if (/already registered|user already exists/i.test(signUp.error.message)) {
+        setAuthNotice("This email is already registered — the password didn't match. Try again, or sign in with a magic link.");
+      } else {
+        setAuthNotice(signUp.error.message);
+      }
+      setAuthBusy(false);
+      return;
+    }
+
+    // Supabase's email-enumeration protection: an existing confirmed user
+    // returns a user object with an empty identities array and no session.
+    const identities = signUp.data.user?.identities ?? null;
+    if (identities && identities.length === 0) {
+      setAuthNotice("This email is already registered — the password didn't match. Try again, or sign in with a magic link.");
+      setAuthBusy(false);
+      return;
+    }
+
+    if (!signUp.data.session) {
+      setAuthNotice("Account created. Check your inbox to confirm your email before signing in.");
     }
     setAuthBusy(false);
   }
