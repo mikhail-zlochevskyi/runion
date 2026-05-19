@@ -1006,6 +1006,21 @@ button {
   color: var(--dim);
 }
 
+/* Chrome/Safari paint a light-blue (or yellow) background on autofilled
+   inputs that ignores normal background-color rules. The inset box-shadow
+   trick masks it with the form's own colour, and text-fill-color keeps
+   the autofilled text legible against the dark theme. */
+.input-wrap input:-webkit-autofill,
+.input-wrap input:-webkit-autofill:hover,
+.input-wrap input:-webkit-autofill:focus,
+.input-wrap input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--cream);
+  -webkit-box-shadow: 0 0 0 1000px var(--espresso-deep) inset;
+  box-shadow: 0 0 0 1000px var(--espresso-deep) inset;
+  caret-color: var(--cream);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 .auth-notice,
 .auth-footnote {
   margin: 0;
