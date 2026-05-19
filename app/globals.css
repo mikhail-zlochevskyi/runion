@@ -1692,6 +1692,43 @@ button {
   justify-content: flex-end;
 }
 
+.stats-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(244, 164, 92, 0.12);
+  color: var(--sun);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+}
+
+.activity-card--awaiting {
+  border-color: rgba(244, 164, 92, 0.55);
+  box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);
+}
+
+.joiner-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(243, 235, 217, 0.04);
+  border: 1px solid var(--line);
+}
+
+.joiner-recap > span {
+  font-size: 0.82rem;
+  color: var(--cream);
+}
+
+.joiner-recap-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .requester-socials {
   display: flex;
   flex-wrap: wrap;

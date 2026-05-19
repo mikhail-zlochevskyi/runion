@@ -237,8 +237,8 @@ async function populate(hostId) {
     const runDate = start.toISOString().slice(0, 10);
     const time = start.toISOString().slice(11, 16);
     const day = start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-    const paceMinSec = Math.max(270, cfg.paceSeconds - 10);
-    const paceMaxSec = Math.min(450, cfg.paceSeconds + 10);
+    const paceMinSec = Math.max(180, cfg.paceSeconds - 10);
+    const paceMaxSec = Math.min(480, cfg.paceSeconds + 10);
     return {
       title: cfg.title,
       description: null,

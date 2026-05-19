@@ -105,8 +105,8 @@ export async function createRun(
   const day = start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
   const runDate = input.startTime.slice(0, 10);
   const time = input.startTime.slice(11, 16);
-  const paceMinSec = Math.max(270, input.paceSeconds - 10);
-  const paceMaxSec = Math.min(450, input.paceSeconds + 10);
+  const paceMinSec = Math.max(180, input.paceSeconds - 10);
+  const paceMaxSec = Math.min(480, input.paceSeconds + 10);
   const groupSize = input.maxGroupSize ?? 3;
 
   const payload = {
@@ -154,7 +154,14 @@ export type ParticipantRow = {
   hostOutcome: HostOutcome | null;
   hostRunAgain: boolean | null;
   hostReviewedAt: string | null;
+  joinerRunAgain: boolean | null;
+  joinerReviewedAt: string | null;
   createdAt: string;
+};
+
+export type UserStats = {
+  completedRuns: number;
+  mutualAffinity: number;
 };
 
 export type HostedBucket = {
@@ -166,6 +173,7 @@ export type HostedBucket = {
 export type MyActivity = {
   pending: { participant: ParticipantRow; run: RunRow }[];
   confirmed: { participant: ParticipantRow; run: RunRow }[];
+  pastConfirmed: { participant: ParticipantRow; run: RunRow }[];
   hosted: HostedBucket[];
   pastHosted: HostedBucket[];
 };
@@ -174,14 +182,14 @@ export async function fetchMyActivity(
   supabase: SB | null,
   args: { profileId: string }
 ): Promise<MyActivity> {
-  if (!supabase) return { pending: [], confirmed: [], hosted: [], pastHosted: [] };
+  if (!supabase) return { pending: [], confirmed: [], pastConfirmed: [], hosted: [], pastHosted: [] };
   await sweepStaleRuns(supabase);
   const { profileId } = args;
 
   const [participantResult, hostedResult] = await Promise.all([
     supabase
       .from("run_participants")
-      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, created_at, run:runs(${FETCH_COLUMNS})`)
+      .select(`id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, joiner_run_again, joiner_reviewed_at, created_at, run:runs!inner(${FETCH_COLUMNS})`)
       .eq("user_id", profileId)
       .in("status", ["requested", "confirmed"]),
     supabase
@@ -194,6 +202,7 @@ export async function fetchMyActivity(
 
   const pending: { participant: ParticipantRow; run: RunRow }[] = [];
   const confirmed: { participant: ParticipantRow; run: RunRow }[] = [];
+  const pastConfirmed: { participant: ParticipantRow; run: RunRow }[] = [];
 
   if (!participantResult.error && participantResult.data) {
     for (const row of participantResult.data as Record<string, unknown>[]) {
@@ -203,8 +212,15 @@ export async function fetchMyActivity(
       if (!run) continue;
       const participant = toParticipantRow(row);
       if (!participant) continue;
-      if (participant.status === "requested") pending.push({ participant, run });
-      else if (participant.status === "confirmed") confirmed.push({ participant, run });
+      if (participant.status === "requested") {
+        pending.push({ participant, run });
+      } else if (participant.status === "confirmed") {
+        if (run.status === "completed" || run.status === "expired") {
+          pastConfirmed.push({ participant, run });
+        } else {
+          confirmed.push({ participant, run });
+        }
+      }
     }
   }
 
@@ -220,7 +236,7 @@ export async function fetchMyActivity(
     const ids = hostedRuns.map((r) => r.id);
     const { data, error } = await supabase
       .from("run_participants")
-      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, created_at")
+      .select("id, run_id, user_id, status, requester_name, requester_whatsapp, requester_socials, host_outcome, host_run_again, host_reviewed_at, joiner_run_again, joiner_reviewed_at, created_at")
       .in("run_id", ids);
     if (!error && data) {
       hostedRequests = (data as Record<string, unknown>[])
@@ -242,7 +258,41 @@ export async function fetchMyActivity(
   const hosted = hostedAll.filter((h) => !isPast(h.run.status));
   const pastHosted = hostedAll.filter((h) => isPast(h.run.status));
 
-  return { pending, confirmed, hosted, pastHosted };
+  return { pending, confirmed, pastConfirmed, hosted, pastHosted };
+}
+
+export async function setJoinerReview(
+  supabase: SB | null,
+  args: { participantId: string; runAgain: boolean }
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase client unavailable." };
+  const { error } = await supabase
+    .from("run_participants")
+    .update({
+      joiner_run_again: args.runAgain,
+      joiner_reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", args.participantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function fetchUserStatsBatch(
+  supabase: SB | null,
+  ids: string[]
+): Promise<Record<string, UserStats>> {
+  if (!supabase || ids.length === 0) return {};
+  const unique = Array.from(new Set(ids));
+  const { data, error } = await supabase.rpc("user_stats_batch", { ids: unique });
+  if (error || !Array.isArray(data)) return {};
+  const out: Record<string, UserStats> = {};
+  for (const row of data as Array<{ user_id: string; completed_runs: number; mutual_affinity: number }>) {
+    out[row.user_id] = {
+      completedRuns: row.completed_runs ?? 0,
+      mutualAffinity: row.mutual_affinity ?? 0,
+    };
+  }
+  return out;
 }
 
 export async function wrapUpRun(
@@ -337,6 +387,8 @@ function toParticipantRow(row: Record<string, unknown>): ParticipantRow | null {
     })(),
     hostRunAgain: typeof row.host_run_again === "boolean" ? row.host_run_again : null,
     hostReviewedAt: stringFromValue(row.host_reviewed_at) ?? null,
+    joinerRunAgain: typeof row.joiner_run_again === "boolean" ? row.joiner_run_again : null,
+    joinerReviewedAt: stringFromValue(row.joiner_reviewed_at) ?? null,
     createdAt: stringFromValue(row.created_at) ?? new Date().toISOString(),
   };
 }
@@ -396,8 +448,8 @@ function toRunRow(row: Record<string, unknown>, fallbackCity: CitySlug): RunRow 
     numberFromValue(row.pace_seconds) ??
     secondsFromInterval(row.pace_min) ??
     315;
-  const paceMin = formatPace(secondsFromInterval(row.pace_min) ?? Math.max(270, paceSeconds - 10));
-  const paceMax = formatPace(secondsFromInterval(row.pace_max) ?? Math.min(450, paceSeconds + 10));
+  const paceMin = formatPace(secondsFromInterval(row.pace_min) ?? Math.max(180, paceSeconds - 10));
+  const paceMax = formatPace(secondsFromInterval(row.pace_max) ?? Math.min(480, paceSeconds + 10));
   const intent = normalizeIntent(stringFromValue(row.intent) ?? stringFromValue(row.goal));
   const cityValue = (stringFromValue(row.city) as CitySlug | undefined) ?? fallbackCity;
 

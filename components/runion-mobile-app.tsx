@@ -16,10 +16,12 @@ import {
   detectSocialsPlatform,
   fetchMyActivity as apiFetchMyActivity,
   fetchOpenRuns,
+  fetchUserStatsBatch as apiFetchUserStatsBatch,
   isValidSocialsUrl,
   openSpots as runOpenSpots,
   paceLabel as runPaceLabel,
   requestSpot as apiRequestSpot,
+  setJoinerReview as apiSetJoinerReview,
   setRequestStatus as apiSetRequestStatus,
   wrapUpRun as apiWrapUpRun,
   dayLabel as runDayLabel,
@@ -28,6 +30,7 @@ import {
   type ParticipantRow,
   type ParticipantStatus as ApiParticipantStatus,
   type RunRow,
+  type UserStats,
 } from "@/lib/api/runs";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAvatar } from "@/lib/uploadAvatar";
@@ -62,11 +65,13 @@ type CoreRun = {
   maxGroupSize: number;
   currentSpots: number;
   status: string;
+  organiserId?: string;
   source: "db" | "mock" | "local";
 };
 
 type RunParticipantActivity = {
   id: string;
+  userId: string;
   run: CoreRun;
   status: ParticipantStatus;
   requesterName: string;
@@ -74,6 +79,9 @@ type RunParticipantActivity = {
   requesterSocials?: string;
   requesterPace?: number;
   requesterIntent?: CoreIntent;
+  joinerRunAgain?: boolean | null;
+  joinerReviewedAt?: string | null;
+  hostOrganiserId?: string;
   createdAt: string;
 };
 
@@ -966,9 +974,11 @@ function RunsFeed({
 }) {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
-  const [activity, setActivity] = useState<{ pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }>({
+  const [stats, setStats] = useState<Record<string, UserStats>>({});
+  const [activity, setActivity] = useState<{ pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; pastConfirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }>({
     pending: [],
     confirmed: [],
+    pastConfirmed: [],
     hosted: [],
     pastHosted: []
   });
@@ -981,7 +991,7 @@ function RunsFeed({
       setLoading(true);
       if (!profileId || profileId === "preview-user") {
         if (mounted) {
-          setActivity({ pending: [], confirmed: [], hosted: [], pastHosted: [] });
+          setActivity({ pending: [], confirmed: [], pastConfirmed: [], hosted: [], pastHosted: [] });
           setLoading(false);
         }
         return;
@@ -990,6 +1000,11 @@ function RunsFeed({
       if (!mounted) return;
       setActivity(adaptMyActivity(raw, profile));
       setLoading(false);
+      const ids = collectStatIds(raw, profileId);
+      if (ids.length) {
+        const next = await apiFetchUserStatsBatch(supabase, ids);
+        if (mounted) setStats(next);
+      }
     }
 
     loadRuns();
@@ -1033,6 +1048,17 @@ function RunsFeed({
     const raw = await apiFetchMyActivity(supabase, { profileId });
     setActivity(adaptMyActivity(raw, profile));
     if (message) setToast(message);
+    const ids = collectStatIds(raw, profileId);
+    if (ids.length) {
+      const next = await apiFetchUserStatsBatch(supabase, ids);
+      setStats(next);
+    }
+  }
+
+  async function handleJoinerReview(participantId: string, runAgain: boolean) {
+    const result = await apiSetJoinerReview(supabase, { participantId, runAgain });
+    if (result.ok) await refreshActivity(runAgain ? "Thanks — saved." : "Saved.");
+    else setToast(result.error || "Couldn't save feedback. Try again.");
   }
 
   async function updateRequestStatus(request: RunParticipantActivity, status: ParticipantStatus) {
@@ -1100,7 +1126,15 @@ function RunsFeed({
           <div className="my-runs-stack">
             <ActivitySection title="Confirmed runs" empty="No confirmed runs yet.">
               {activity.confirmed.map((item) => (
-                <ActivityRunCard key={item.id} item={item} badge="Confirmed" note={item.run.participants} cta="View details" showApprovedContact />
+                <ActivityRunCard
+                  key={item.id}
+                  item={item}
+                  badge="Confirmed"
+                  note={item.run.participants}
+                  cta="View details"
+                  hostStats={item.hostOrganiserId ? stats[item.hostOrganiserId] : undefined}
+                  showApprovedContact
+                />
               ))}
             </ActivitySection>
 
@@ -1115,6 +1149,7 @@ function RunsFeed({
                 <HostedRunCard
                   key={hosted.run.id}
                   hosted={hosted}
+                  stats={stats}
                   onApprove={(request) => updateRequestStatus(request, "confirmed")}
                   onDecline={(request) => updateRequestStatus(request, "declined")}
                   onWrapUp={(h) => setRecapTarget(h)}
@@ -1123,12 +1158,26 @@ function RunsFeed({
               ))}
             </ActivitySection>
 
+            {activity.pastConfirmed.length ? (
+              <ActivitySection title="Past runs you joined" empty="">
+                {activity.pastConfirmed.map((item) => (
+                  <JoinedPastCard
+                    key={item.id}
+                    item={item}
+                    hostStats={item.hostOrganiserId ? stats[item.hostOrganiserId] : undefined}
+                    onAnswer={(again) => handleJoinerReview(item.id, again)}
+                  />
+                ))}
+              </ActivitySection>
+            ) : null}
+
             {activity.pastHosted.length ? (
               <ActivitySection title="Past runs" empty="">
                 {activity.pastHosted.map((hosted) => (
                   <HostedRunCard
                     key={hosted.run.id}
                     hosted={hosted}
+                    stats={stats}
                     onApprove={(request) => updateRequestStatus(request, "confirmed")}
                     onDecline={(request) => updateRequestStatus(request, "declined")}
                   />
@@ -1476,12 +1525,14 @@ function ActivityRunCard({
   badge,
   note,
   cta,
+  hostStats,
   showApprovedContact = false
 }: {
   item: RunParticipantActivity;
   badge: string;
   note: string;
   cta: string;
+  hostStats?: UserStats;
   showApprovedContact?: boolean;
 }) {
   return (
@@ -1493,19 +1544,57 @@ function ActivityRunCard({
       <h3>{item.run.title}</h3>
       <RunFactGrid run={item.run} />
       <p className="activity-note">{note}</p>
+      <StatsBadge stats={hostStats} />
       {showApprovedContact ? <ApprovedContact whatsapp={item.requesterWhatsapp} fallback="Your WhatsApp is shared with the host for coordination." /> : null}
+    </article>
+  );
+}
+
+function JoinedPastCard({
+  item,
+  hostStats,
+  onAnswer,
+}: {
+  item: RunParticipantActivity;
+  hostStats?: UserStats;
+  onAnswer: (runAgain: boolean) => void;
+}) {
+  const answered = item.joinerReviewedAt != null || item.joinerRunAgain != null;
+  return (
+    <article className={`activity-card${answered ? "" : " activity-card--awaiting"}`}>
+      <div className="activity-card-head">
+        <span className="status-badge status-badge--past">Completed</span>
+      </div>
+      <h3>{item.run.title}</h3>
+      <RunFactGrid run={item.run} />
+      <StatsBadge stats={hostStats} />
+      {answered ? (
+        <p className="activity-note">
+          {item.joinerRunAgain ? "You'd run with them again 👍" : "Saved — no run again."}
+        </p>
+      ) : (
+        <div className="joiner-recap">
+          <span>Would you run with the host again?</span>
+          <div className="joiner-recap-actions">
+            <button type="button" className="recap-pill recap-pill--active" onClick={() => onAnswer(true)}>👍 Yes</button>
+            <button type="button" className="recap-pill" onClick={() => onAnswer(false)}>👎 No</button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
 
 function HostedRunCard({
   hosted,
+  stats,
   onApprove,
   onDecline,
   onWrapUp,
   onCancel
 }: {
   hosted: HostedRunActivity;
+  stats?: Record<string, UserStats>;
   onApprove: (request: RunParticipantActivity) => void;
   onDecline: (request: RunParticipantActivity) => void;
   onWrapUp?: (hosted: HostedRunActivity) => void;
@@ -1539,6 +1628,7 @@ function HostedRunCard({
           {hosted.confirmedRequests.map((request) => (
             <div key={request.id} className="approved-contact">
               <strong>{request.requesterName}</strong>
+              <StatsBadge stats={stats?.[request.userId]} />
               <RequesterSocials whatsapp={request.requesterWhatsapp} socials={request.requesterSocials} />
             </div>
           ))}
@@ -1554,6 +1644,7 @@ function HostedRunCard({
                 <span>
                   {request.requesterPace ? `${formatPace(request.requesterPace)}/km` : "Pace not shared"} · {intentLabels[request.requesterIntent ?? "social"]}
                 </span>
+                <StatsBadge stats={stats?.[request.userId]} />
                 <RequesterSocials socials={request.requesterSocials} />
               </div>
               <div className="request-actions">
@@ -2566,8 +2657,8 @@ function OptionStack({
 }
 
 
-function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }) {
-  return activity.pending.length > 0 || activity.confirmed.length > 0 || activity.hosted.length > 0 || activity.pastHosted.length > 0;
+function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; pastConfirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] }) {
+  return activity.pending.length > 0 || activity.confirmed.length > 0 || activity.pastConfirmed.length > 0 || activity.hosted.length > 0 || activity.pastHosted.length > 0;
 }
 
 function titleFromIntent(intent: CoreIntent) {
@@ -2616,6 +2707,29 @@ function formatRunStart(value: string) {
   return date.toLocaleDateString("en-US", { weekday: "short" }) + " " + date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+function collectStatIds(raw: import("@/lib/api/runs").MyActivity, selfId: string): string[] {
+  const ids = new Set<string>();
+  for (const { run } of [...raw.confirmed, ...raw.pastConfirmed]) {
+    if (run.organiserId && run.organiserId !== selfId) ids.add(run.organiserId);
+  }
+  for (const { participant } of raw.pending) {
+    if (participant.userId !== selfId) ids.add(participant.userId);
+  }
+  for (const bucket of [...raw.hosted, ...raw.pastHosted]) {
+    for (const p of [...bucket.pending, ...bucket.confirmed]) {
+      if (p.userId !== selfId) ids.add(p.userId);
+    }
+  }
+  return Array.from(ids);
+}
+
+function StatsBadge({ stats }: { stats?: UserStats }) {
+  if (!stats || (stats.completedRuns === 0 && stats.mutualAffinity === 0)) return null;
+  const runs = stats.completedRuns === 1 ? "1 run" : `${stats.completedRuns} runs`;
+  const mut = stats.mutualAffinity === 1 ? "1 mutual" : `${stats.mutualAffinity} mutuals`;
+  return <span className="stats-badge">{runs} · {mut}</span>;
+}
+
 function runRowToCoreRun(run: RunRow): CoreRun {
   return {
     id: run.id,
@@ -2633,6 +2747,7 @@ function runRowToCoreRun(run: RunRow): CoreRun {
     maxGroupSize: run.maxGroupSize,
     currentSpots: run.currentSpots,
     status: run.status,
+    organiserId: run.organiserId ?? undefined,
     source: "db",
   };
 }
@@ -2640,6 +2755,7 @@ function runRowToCoreRun(run: RunRow): CoreRun {
 function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfile: OnboardingDraft): RunParticipantActivity {
   return {
     id: p.id,
+    userId: p.userId,
     run,
     status: p.status as ParticipantStatus,
     requesterName: p.requesterName ?? fallbackProfile.name ?? "Runner",
@@ -2647,6 +2763,9 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
     requesterSocials: p.requesterSocials ?? undefined,
     requesterPace: fallbackProfile.comfortable_pace_seconds_per_km,
     requesterIntent: profileIntentToCoreIntent(fallbackProfile.run_intents[0] ?? "find_partners"),
+    joinerRunAgain: p.joinerRunAgain,
+    joinerReviewedAt: p.joinerReviewedAt,
+    hostOrganiserId: run.organiserId,
     createdAt: p.createdAt,
   };
 }
@@ -2654,9 +2773,10 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
 function adaptMyActivity(
   raw: import("@/lib/api/runs").MyActivity,
   profile: OnboardingDraft
-): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] } {
+): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; pastConfirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] } {
   const pending = raw.pending.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
   const confirmed = raw.confirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
+  const pastConfirmed = raw.pastConfirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
   const adaptHosted = ({ run, pending: pendingRows, confirmed: confirmedRows }: import("@/lib/api/runs").HostedBucket): HostedRunActivity => {
     const core = runRowToCoreRun(run);
     return {
@@ -2668,7 +2788,7 @@ function adaptMyActivity(
   };
   const hosted = raw.hosted.map(adaptHosted);
   const pastHosted = raw.pastHosted.map(adaptHosted);
-  return { pending, confirmed, hosted, pastHosted };
+  return { pending, confirmed, pastConfirmed, hosted, pastHosted };
 }
 
 function AvatarPicker({
