@@ -3267,16 +3267,16 @@ function buildRunWhatsappMessage({
   const senderFirst = senderName?.split(" ")[0];
   const greeting = recipientFirst ? `Hi ${recipientFirst},` : "Hi,";
   const intro = senderFirst
-    ? `${greeting} it's ${senderFirst} from runion 👋`
-    : `${greeting} reaching out via runion 👋`;
-  const signOff = senderFirst ? ` — ${senderFirst}` : "";
+    ? `${greeting} it's ${senderFirst} from runion.`
+    : `${greeting} reaching out via runion.`;
+  const signOff = senderFirst ? ` - ${senderFirst}` : "";
   const lines = [
     intro,
     "",
     `Confirming our ${run.title || "run"}:`,
-    `📍 ${run.locationName}`,
-    `🗓 ${runDayLabel(run.startTime)} ${runTimeLabel(run.startTime)}`,
-    `🏃 ${run.distanceKm} km · ${runPaceLabel(run)}/km`,
+    `Where: ${run.locationName}`,
+    `When: ${runDayLabel(run.startTime)} ${runTimeLabel(run.startTime)}`,
+    `Run: ${run.distanceKm} km, ${runPaceLabel(run)}/km`,
     "",
     `See you there!${signOff}`,
   ];
