@@ -40,7 +40,7 @@ type AppState = "loading" | "auth" | "onboarding" | "runs";
 type RunsTab = "map" | "post" | "runs";
 type SheetState = "hidden" | "peek" | "full";
 type LocationStatus = "idle" | "locating" | "found" | "denied" | "unavailable";
-type MapRunFilter = "all" | "pace_500_530" | "pace_530_600" | "social" | "tempo";
+type MapRunFilter = "all" | "my_pace" | "today" | "has_space" | "social" | "tempo";
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social" | "consistency";
@@ -150,10 +150,11 @@ const groupSizes: { value: PreferredGroupSize; label: string; recommended?: bool
 ];
 
 const mapRunFilters: { value: MapRunFilter; label: string }[] = [
-  { value: "all", label: "All runs" },
-  { value: "pace_500_530", label: "5:00-5:30 /km" },
-  { value: "pace_530_600", label: "5:30-6:00 /km" },
-  { value: "social", label: "Easy / social" },
+  { value: "all", label: "All" },
+  { value: "my_pace", label: "My pace" },
+  { value: "today", label: "Today" },
+  { value: "has_space", label: "Has space" },
+  { value: "social", label: "Social" },
   { value: "tempo", label: "Tempo" }
 ];
 
@@ -1911,7 +1912,7 @@ function MatchedRunsMap({
     youMarker: import("leaflet").Marker;
     markers: import("leaflet").Marker[];
   } | null>(null);
-  const filteredRuns = useMemo(() => runs.filter((run) => runMatchesMapFilter(run, activeFilter)), [activeFilter, runs]);
+  const filteredRuns = useMemo(() => runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile)), [activeFilter, runs, profile]);
   const activeRun = filteredRuns.find((run) => run.id === activeRunId) ?? filteredRuns[0];
 
   useEffect(() => {
@@ -2367,10 +2368,22 @@ function MatchedRunCard({
   );
 }
 
-function runMatchesMapFilter(run: RunRow, filter: MapRunFilter) {
+function runMatchesMapFilter(run: RunRow, filter: MapRunFilter, profile: OnboardingDraft) {
   if (filter === "all") return true;
-  if (filter === "pace_500_530") return run.paceSeconds >= 300 && run.paceSeconds <= 330;
-  if (filter === "pace_530_600") return run.paceSeconds >= 330 && run.paceSeconds <= 360;
+  if (filter === "my_pace") {
+    const center = profile.comfortable_pace_seconds_per_km ?? 315;
+    const min = profile.comfortable_pace_min_seconds_per_km ?? center - 15;
+    const max = profile.comfortable_pace_max_seconds_per_km ?? center + 15;
+    return run.paceSeconds >= min && run.paceSeconds <= max;
+  }
+  if (filter === "today") {
+    const start = new Date(run.startTime);
+    const now = new Date();
+    return start.getFullYear() === now.getFullYear()
+      && start.getMonth() === now.getMonth()
+      && start.getDate() === now.getDate();
+  }
+  if (filter === "has_space") return run.currentSpots < run.maxGroupSize;
   if (filter === "social") return run.intent === "social";
   if (filter === "tempo") return run.intent === "tempo";
   return true;
