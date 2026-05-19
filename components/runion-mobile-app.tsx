@@ -1946,12 +1946,35 @@ function PostRunScreen({
     pickedLat: null,
     pickedLng: null,
   }));
+  // Buffered strings so iOS numeric keyboards can edit freely (clear,
+  // partial input, etc.) without React snapping the value back every
+  // keystroke. We commit to the numeric draft on blur.
+  const [paceText, setPaceText] = useState(() => formatPace(draft.paceSeconds));
+  const [distanceText, setDistanceText] = useState(() => String(draft.distanceKm));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [locationNameTouched, setLocationNameTouched] = useState(false);
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+
+  function commitPace() {
+    const seconds = paceTextToSeconds(paceText, draft.paceSeconds);
+    setDraft((current) => ({ ...current, paceSeconds: seconds }));
+    setPaceText(formatPace(seconds));
+  }
+
+  function commitDistance() {
+    const next = Number(distanceText.replace(",", "."));
+    if (Number.isFinite(next) && next > 0) {
+      const clamped = Math.min(50, Math.max(1, next));
+      setDraft((current) => ({ ...current, distanceKm: clamped }));
+      setDistanceText(String(clamped));
+    } else {
+      // Restore the last committed value on bad input.
+      setDistanceText(String(draft.distanceKm));
+    }
+  }
 
   // Reset pin when city changes — bounds differ.
   useEffect(() => {
@@ -2011,6 +2034,18 @@ function PostRunScreen({
   }
 
   async function submitRun() {
+    // Flush any in-flight numeric input edits before validating.
+    const paceSeconds = paceTextToSeconds(paceText, draft.paceSeconds);
+    const distanceRaw = Number(distanceText.replace(",", "."));
+    const distanceKm = Number.isFinite(distanceRaw) && distanceRaw > 0
+      ? Math.min(50, Math.max(1, distanceRaw))
+      : draft.distanceKm;
+    if (paceSeconds !== draft.paceSeconds || distanceKm !== draft.distanceKm) {
+      setDraft((current) => ({ ...current, paceSeconds, distanceKm }));
+      setPaceText(formatPace(paceSeconds));
+      setDistanceText(String(distanceKm));
+    }
+
     if (!draft.startTime) {
       setError("Add a time to post your run.");
       return;
@@ -2043,8 +2078,8 @@ function PostRunScreen({
         lat: draft.pickedLat,
         lng: draft.pickedLng,
         startTime: draft.startTime,
-        paceSeconds: draft.paceSeconds,
-        distanceKm: draft.distanceKm,
+        paceSeconds,
+        distanceKm,
         intent: draft.intent,
         maxGroupSize: 3,
       },
@@ -2075,25 +2110,36 @@ function PostRunScreen({
         <div className="post-run-form">
           <label className="field-label">
             Time
-            <input value={draft.startTime} type="datetime-local" onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))} />
+            <input
+              value={draft.startTime}
+              type="datetime-local"
+              onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" })}
+            />
           </label>
           <label className="field-label">
-            Pace
+            Pace (min/km)
             <input
-              value={formatPace(draft.paceSeconds)}
+              value={paceText}
               inputMode="numeric"
-              onChange={(event) => setDraft((current) => ({ ...current, paceSeconds: parsePaceInput(event.target.value, current.paceSeconds) }))}
+              autoComplete="off"
               placeholder="5:15"
+              onChange={(event) => setPaceText(event.target.value)}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" })}
+              onBlur={commitPace}
             />
           </label>
           <label className="field-label">
             Distance km
             <input
-              value={draft.distanceKm}
-              type="number"
-              min={1}
-              step={0.5}
-              onChange={(event) => setDraft((current) => ({ ...current, distanceKm: Number(event.target.value) }))}
+              value={distanceText}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="7"
+              onChange={(event) => setDistanceText(event.target.value)}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" })}
+              onBlur={commitDistance}
             />
           </label>
           <div className="post-run-intent-field">
@@ -3199,6 +3245,29 @@ function toDatetimeLocal(date: Date) {
 function parsePaceInput(value: string, fallback: number) {
   const parsed = secondsFromPace(value);
   return parsed ? clampPace(parsed) : fallback;
+}
+
+// Tolerant pace parser used by the post-run form. Accepts "5:30", "5.30",
+// "5,30" and bare-digit "530" so iOS' digits-only keyboard works without
+// requiring the colon.
+function paceTextToSeconds(value: string, fallback: number): number {
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  const normalized = trimmed.replace(/[.,\s]/g, ":");
+  if (normalized.includes(":")) {
+    const seconds = secondsFromPace(normalized);
+    return seconds ? clampPace(seconds) : fallback;
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 3) {
+    const minutes = Number(digits.slice(0, digits.length - 2));
+    const sec = Number(digits.slice(-2));
+    const total = minutes * 60 + sec;
+    return total > 0 ? clampPace(total) : fallback;
+  }
+  const onlyMinutes = Number(digits);
+  if (onlyMinutes > 0) return clampPace(onlyMinutes * 60);
+  return fallback;
 }
 
 function secondsFromPace(value: string) {

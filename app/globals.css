@@ -1827,6 +1827,11 @@ button {
 
 .runs-shell {
   overflow-y: auto;
+  /* Leaves room for the sticky brand bar so iOS' scroll-into-view (and
+     our manual scrollIntoView on focus) doesn't land focused inputs
+     hidden behind it. */
+  scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 72px);
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 120px);
 }
 
 .runs-panel,
