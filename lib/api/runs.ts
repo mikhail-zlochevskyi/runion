@@ -18,6 +18,8 @@ export type RunRow = {
   distanceKm: number;
   intent: RunIntent;
   organiserId: string | null;
+  organiserName?: string | null;
+  organiserWhatsapp?: string | null;
   maxGroupSize: number;
   currentSpots: number;
   status: string;
@@ -219,6 +221,37 @@ export async function fetchMyActivity(
           pastConfirmed.push({ participant, run });
         } else {
           confirmed.push({ participant, run });
+        }
+      }
+    }
+  }
+
+  // Batch-load host name/whatsapp for participant runs so the joiner can
+  // message the host with a prefilled run-details message. We only enrich
+  // confirmed and pastConfirmed entries — pending requests intentionally
+  // don't expose the host's contact.
+  const hostIds = Array.from(
+    new Set(
+      [...confirmed, ...pastConfirmed]
+        .map(({ run }) => run.organiserId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  if (hostIds.length) {
+    const { data: hostRows, error: hostError } = await supabase
+      .from("users")
+      .select("id, name, whatsapp")
+      .in("id", hostIds);
+    if (!hostError && hostRows) {
+      const hostMap = new Map<string, { name?: string | null; whatsapp?: string | null }>();
+      for (const row of hostRows as Array<{ id: string; name?: string | null; whatsapp?: string | null }>) {
+        hostMap.set(row.id, { name: row.name, whatsapp: row.whatsapp });
+      }
+      for (const entry of [...confirmed, ...pastConfirmed]) {
+        const host = entry.run.organiserId ? hostMap.get(entry.run.organiserId) : null;
+        if (host) {
+          entry.run.organiserName = host.name ?? null;
+          entry.run.organiserWhatsapp = host.whatsapp ?? null;
         }
       }
     }

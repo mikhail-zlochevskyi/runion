@@ -82,6 +82,8 @@ type RunParticipantActivity = {
   joinerRunAgain?: boolean | null;
   joinerReviewedAt?: string | null;
   hostOrganiserId?: string;
+  hostName?: string;
+  hostWhatsapp?: string;
   createdAt: string;
 };
 
@@ -1133,6 +1135,7 @@ function RunsFeed({
                   note={item.run.participants}
                   cta="View details"
                   hostStats={item.hostOrganiserId ? stats[item.hostOrganiserId] : undefined}
+                  viewerName={profile.name}
                   showApprovedContact
                 />
               ))}
@@ -1561,6 +1564,7 @@ function ActivityRunCard({
   note,
   cta,
   hostStats,
+  viewerName,
   showApprovedContact = false
 }: {
   item: RunParticipantActivity;
@@ -1568,6 +1572,7 @@ function ActivityRunCard({
   note: string;
   cta: string;
   hostStats?: UserStats;
+  viewerName?: string;
   showApprovedContact?: boolean;
 }) {
   return (
@@ -1580,8 +1585,51 @@ function ActivityRunCard({
       <RunFactGrid run={item.run} />
       <p className="activity-note">{note}</p>
       <StatsBadge stats={hostStats} />
-      {showApprovedContact ? <ApprovedContact whatsapp={item.requesterWhatsapp} fallback="Your WhatsApp is shared with the host for coordination." /> : null}
+      {showApprovedContact ? (
+        <HostContact
+          hostName={item.hostName}
+          hostWhatsapp={item.hostWhatsapp}
+          run={item.run}
+          viewerName={viewerName}
+        />
+      ) : null}
     </article>
+  );
+}
+
+function HostContact({
+  hostName,
+  hostWhatsapp,
+  run,
+  viewerName,
+}: {
+  hostName?: string;
+  hostWhatsapp?: string;
+  run: CoreRun;
+  viewerName?: string;
+}) {
+  if (!hostWhatsapp) {
+    return (
+      <div className="approved-contact">
+        <MessageCircle size={15} />
+        <span>
+          <strong>{hostName ? `${hostName} (host)` : "Host"}</strong>
+          <small>Host hasn&apos;t shared WhatsApp yet — they&apos;ll reach out to you.</small>
+        </span>
+      </div>
+    );
+  }
+  const text = buildRunWhatsappMessage({ run, senderName: viewerName, recipientName: hostName });
+  return (
+    <div className="approved-contact">
+      <MessageCircle size={15} />
+      <span>
+        <strong>{hostName ? `${hostName} (host)` : "Host WhatsApp"}</strong>
+        <a href={whatsappHref(hostWhatsapp, text)} target="_blank" rel="noreferrer">
+          {hostWhatsapp}
+        </a>
+      </span>
+    </div>
   );
 }
 
@@ -2806,7 +2854,12 @@ function runRowToCoreRun(run: RunRow): CoreRun {
   };
 }
 
-function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfile: OnboardingDraft): RunParticipantActivity {
+function participantRowToActivity(
+  p: ParticipantRow,
+  run: CoreRun,
+  fallbackProfile: OnboardingDraft,
+  host?: { name?: string | null; whatsapp?: string | null }
+): RunParticipantActivity {
   return {
     id: p.id,
     userId: p.userId,
@@ -2820,6 +2873,8 @@ function participantRowToActivity(p: ParticipantRow, run: CoreRun, fallbackProfi
     joinerRunAgain: p.joinerRunAgain,
     joinerReviewedAt: p.joinerReviewedAt,
     hostOrganiserId: run.organiserId,
+    hostName: host?.name ?? undefined,
+    hostWhatsapp: host?.whatsapp ?? undefined,
     createdAt: p.createdAt,
   };
 }
@@ -2828,9 +2883,15 @@ function adaptMyActivity(
   raw: import("@/lib/api/runs").MyActivity,
   profile: OnboardingDraft
 ): { pending: RunParticipantActivity[]; confirmed: RunParticipantActivity[]; pastConfirmed: RunParticipantActivity[]; hosted: HostedRunActivity[]; pastHosted: HostedRunActivity[] } {
-  const pending = raw.pending.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
-  const confirmed = raw.confirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
-  const pastConfirmed = raw.pastConfirmed.map(({ participant, run }) => participantRowToActivity(participant, runRowToCoreRun(run), profile));
+  const pending = raw.pending.map(({ participant, run }) =>
+    participantRowToActivity(participant, runRowToCoreRun(run), profile, { name: run.organiserName, whatsapp: run.organiserWhatsapp })
+  );
+  const confirmed = raw.confirmed.map(({ participant, run }) =>
+    participantRowToActivity(participant, runRowToCoreRun(run), profile, { name: run.organiserName, whatsapp: run.organiserWhatsapp })
+  );
+  const pastConfirmed = raw.pastConfirmed.map(({ participant, run }) =>
+    participantRowToActivity(participant, runRowToCoreRun(run), profile, { name: run.organiserName, whatsapp: run.organiserWhatsapp })
+  );
   const adaptHosted = ({ run, pending: pendingRows, confirmed: confirmedRows }: import("@/lib/api/runs").HostedBucket): HostedRunActivity => {
     const core = runRowToCoreRun(run);
     return {
