@@ -1349,57 +1349,7 @@ function ProfileScreen({
             <span className="privacy-note">Helps people understand who they&apos;re running with. Hosts see this when you request a spot.</span>
           </label>
 
-          <label className="field-label">
-            Comfortable pace range
-            <div className="pace-range-fields">
-              <span className="input-wrap">
-                <CalendarClock size={16} />
-                <input
-                  aria-label="Minimum comfortable pace"
-                  value={formatPace(localProfile.comfortable_pace_min_seconds_per_km ?? paceRangeFromCenter(localProfile.comfortable_pace_seconds_per_km).min)}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setLocalProfile((current) => {
-                      const currentRange = normalizePaceRange(current);
-                      const min = parsePaceInput(event.target.value, currentRange.min);
-                      const max = Math.max(min, currentRange.max);
-                      return {
-                        ...current,
-                        comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
-                        comfortable_pace_min_seconds_per_km: min,
-                        comfortable_pace_max_seconds_per_km: max
-                      };
-                    })
-                  }
-                  placeholder="5:00"
-                />
-                <span className="input-suffix">min</span>
-              </span>
-              <span className="pace-range-divider">to</span>
-              <span className="input-wrap">
-                <input
-                  aria-label="Maximum comfortable pace"
-                  value={formatPace(localProfile.comfortable_pace_max_seconds_per_km ?? paceRangeFromCenter(localProfile.comfortable_pace_seconds_per_km).max)}
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setLocalProfile((current) => {
-                      const currentRange = normalizePaceRange(current);
-                      const max = parsePaceInput(event.target.value, currentRange.max);
-                      const min = Math.min(currentRange.min, max);
-                      return {
-                        ...current,
-                        comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
-                        comfortable_pace_min_seconds_per_km: min,
-                        comfortable_pace_max_seconds_per_km: max
-                      };
-                    })
-                  }
-                  placeholder="5:30"
-                />
-                <span className="input-suffix">/km</span>
-              </span>
-            </div>
-          </label>
+          <ProfilePaceRangeField profile={localProfile} setProfile={setLocalProfile} />
 
           <ProfileChoiceGroup title="Runner type">
             <OptionStack
@@ -1464,6 +1414,89 @@ function ProfileChoiceGroup({ title, children }: { title: string; children: Reac
       <legend>{title}</legend>
       {children}
     </fieldset>
+  );
+}
+
+function ProfilePaceRangeField({
+  profile,
+  setProfile,
+}: {
+  profile: OnboardingDraft;
+  setProfile: Dispatch<SetStateAction<OnboardingDraft>>;
+}) {
+  const paceRange = normalizePaceRange(profile);
+  const minPercent = ((paceRange.min - 180) / 300) * 100;
+  const maxPercent = ((paceRange.max - 180) / 300) * 100;
+  return (
+    <label className="field-label">
+      Comfortable pace range
+      <div className="pace-readout" aria-live="polite">
+        <span>{formatPace(paceRange.min)}-{formatPace(paceRange.max)}</span>
+        <small>/km</small>
+      </div>
+      <div
+        className="onboarding-pace-range"
+        style={
+          {
+            "--pace-min": `${minPercent}%`,
+            "--pace-max": `${maxPercent}%`,
+          } as CSSProperties
+        }
+      >
+        <div className="pace-range-values">
+          <span>Min {formatPace(paceRange.min)}</span>
+          <span>Max {formatPace(paceRange.max)}</span>
+        </div>
+        <div className="dual-pace-slider">
+          <input
+            aria-label="Minimum comfortable pace"
+            type="range"
+            min={180}
+            max={480}
+            step={15}
+            value={paceRange.min}
+            onChange={(event) =>
+              setProfile((current) => {
+                const currentRange = normalizePaceRange(current);
+                const min = Number(event.target.value);
+                const max = Math.max(min, currentRange.max);
+                return {
+                  ...current,
+                  comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                  comfortable_pace_min_seconds_per_km: min,
+                  comfortable_pace_max_seconds_per_km: max,
+                };
+              })
+            }
+          />
+          <input
+            aria-label="Maximum comfortable pace"
+            type="range"
+            min={180}
+            max={480}
+            step={15}
+            value={paceRange.max}
+            onChange={(event) =>
+              setProfile((current) => {
+                const currentRange = normalizePaceRange(current);
+                const max = Number(event.target.value);
+                const min = Math.min(currentRange.min, max);
+                return {
+                  ...current,
+                  comfortable_pace_seconds_per_km: Math.round((min + max) / 2),
+                  comfortable_pace_min_seconds_per_km: min,
+                  comfortable_pace_max_seconds_per_km: max,
+                };
+              })
+            }
+          />
+        </div>
+        <div className="slider-labels">
+          <span>3:00</span>
+          <span>8:00</span>
+        </div>
+      </div>
+    </label>
   );
 }
 
