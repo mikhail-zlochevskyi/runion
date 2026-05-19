@@ -35,6 +35,27 @@ npm run build
 
 The Map tab now reads open runs from Supabase via `lib/api/runs.ts` (`fetchOpenRuns`, `createRun`, `requestSpot`). Posted runs persist to the `runs` table and appear on the Map for the matching city. The seed data in `lib/runs.ts` is retained only as a fallback for the Runs feed when no backend session is available.
 
+### Test data: seed runs for BCN & SG
+
+```bash
+npm run seed:test-runs            # reset + populate 7 BCN + 7 SG runs
+npm run seed:test-runs:reset      # delete seeded rows only
+npm run seed:test-runs:drain      # send queued join alerts via the edge function
+```
+
+All inserted rows carry `is_seed=true`. When anyone requests a spot on a seeded run, the `notify_on_seed_join` trigger queues a `notification_jobs` row and (if `pg_net` + the `app.settings.functions_url` / `app.settings.service_role_key` Postgres GUCs are set) calls the `seed-join-notify` edge function which emails `SEED_ALERT_EMAIL` (defaults to `mzlochevskyi@gmail.com`) via Resend.
+
+If the trigger can't reach the edge function, `npm run seed:test-runs:drain` empties the queue manually — same email, same content.
+
+To wire the immediate-fire path, set the GUCs once per project:
+
+```sql
+alter database postgres set app.settings.functions_url = 'https://<project-ref>.supabase.co/functions/v1';
+alter database postgres set app.settings.service_role_key = '<service-role-jwt>';
+```
+
+Deploy the function with `supabase functions deploy seed-join-notify`.
+
 ## Onboarding Flow
 
 Runion is positioned around matching, not browsing: "Find 2-3 runners at your pace. No random groups."

@@ -689,7 +689,6 @@ export function RunionMobileApp({ initialCity }: Props) {
         supabase={supabase}
         requestedRunId={requestedRunId}
         onRequest={requestSpot}
-        onTuneProfile={() => setAppState("onboarding")}
         onPostRun={() => router.push(`/post-run#${city}`)}
         onShowRuns={() => router.push(`/runs#${city}`)}
         onProfile={() => router.push(`/profile#${city}`)}
@@ -1878,7 +1877,6 @@ function MatchedRunsMap({
   supabase,
   requestedRunId,
   onRequest,
-  onTuneProfile,
   onPostRun,
   onShowRuns,
   onProfile
@@ -1889,7 +1887,6 @@ function MatchedRunsMap({
   supabase: ReturnType<typeof createClient>;
   requestedRunId: string;
   onRequest: (runId: string) => void;
-  onTuneProfile: () => void;
   onPostRun: () => void;
   onShowRuns: () => void;
   onProfile: () => void;
@@ -2279,9 +2276,6 @@ function MatchedRunsMap({
         {activeRun ? (
           <div className="active-run-bar">
             <span>{activeRun.locationName}</span>
-            <button className="text-btn" onClick={onTuneProfile}>
-              Tune profile
-            </button>
           </div>
         ) : null}
       </section>

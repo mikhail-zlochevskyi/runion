@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:test-runs": "node scripts/seed-test-runs.cjs",
+    "seed:test-runs:reset": "node scripts/seed-test-runs.cjs --reset",
+    "seed:test-runs:drain": "node scripts/seed-test-runs.cjs --drain"
   },
   "dependencies": {
     "@supabase/ssr": "0.5.2",
