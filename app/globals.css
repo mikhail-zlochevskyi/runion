@@ -1444,6 +1444,52 @@ button {
   font-size: 0.75rem;
 }
 
+.location-search {
+  position: relative;
+}
+
+.location-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--espresso-darker);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.location-suggestion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--cream);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.location-suggestion:hover,
+.location-suggestion:focus-visible {
+  background: rgba(244, 164, 92, 0.12);
+  outline: none;
+}
+
+.location-suggestion-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .input-wrap--incomplete {
   border-color: rgba(244, 164, 92, 0.55) !important;
   box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);

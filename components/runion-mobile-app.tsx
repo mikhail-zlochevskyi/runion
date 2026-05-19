@@ -1746,16 +1746,45 @@ function PostRunScreen({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [locationNameTouched, setLocationNameTouched] = useState(false);
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
   // Reset pin when city changes — bounds differ.
   useEffect(() => {
     setDraft((current) => ({ ...current, pickedLat: null, pickedLng: null, locationName: "" }));
     setLocationNameTouched(false);
+    setSuggestions([]);
+    setSuggestionsOpen(false);
   }, [city]);
+
+  // Debounced forward-geocode as the user types the location name.
+  useEffect(() => {
+    if (!suggestionsOpen) return;
+    const query = draft.locationName.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const handle = setTimeout(() => {
+      forwardGeocode(query, city).then((results) => {
+        setSuggestions(results);
+        setSearching(false);
+      });
+    }, 400);
+    return () => {
+      clearTimeout(handle);
+      setSearching(false);
+    };
+  }, [draft.locationName, city, suggestionsOpen]);
 
   function handlePickLocation(lat: number, lng: number) {
     setDraft((current) => ({ ...current, pickedLat: lat, pickedLng: lng }));
     setError("");
+    setSuggestionsOpen(false);
+    setSuggestions([]);
     if (locationNameTouched) return;
     reverseGeocode(lat, lng).then((name) => {
       if (!name) return;
@@ -1763,6 +1792,19 @@ function PostRunScreen({
         ? { ...current, locationName: name }
         : current));
     });
+  }
+
+  function chooseSuggestion(suggestion: LocationSuggestion) {
+    setDraft((current) => ({
+      ...current,
+      locationName: suggestion.label.split(" — ")[0],
+      pickedLat: suggestion.lat,
+      pickedLng: suggestion.lng,
+    }));
+    setLocationNameTouched(true);
+    setSuggestionsOpen(false);
+    setSuggestions([]);
+    setError("");
   }
 
   async function submitRun() {
@@ -1883,16 +1925,53 @@ function PostRunScreen({
               pickedLng={draft.pickedLng}
               onPick={handlePickLocation}
             />
-            <input
-              value={draft.locationName}
-              onChange={(event) => {
-                setLocationNameTouched(true);
-                setDraft((current) => ({ ...current, locationName: event.target.value }));
-              }}
-              placeholder="e.g. Ciutadella Park"
-            />
+            <div className="location-search">
+              <input
+                value={draft.locationName}
+                onChange={(event) => {
+                  setLocationNameTouched(true);
+                  setSuggestionsOpen(true);
+                  setDraft((current) => ({ ...current, locationName: event.target.value }));
+                }}
+                onFocus={() => {
+                  if (draft.locationName.trim().length >= 2) setSuggestionsOpen(true);
+                }}
+                onBlur={() => {
+                  // Delay so a click on a suggestion still registers.
+                  setTimeout(() => setSuggestionsOpen(false), 150);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && suggestions.length > 0) {
+                    event.preventDefault();
+                    chooseSuggestion(suggestions[0]);
+                  }
+                }}
+                placeholder={city === "sg" ? "Type a place, address, or block (e.g. 88)" : "Type a place or address"}
+                autoComplete="off"
+              />
+              {suggestionsOpen && (searching || suggestions.length > 0) ? (
+                <ul className="location-suggestions" role="listbox">
+                  {searching && suggestions.length === 0 ? (
+                    <li className="location-suggestion-empty">Searching…</li>
+                  ) : (
+                    suggestions.map((suggestion, index) => (
+                      <li key={`${suggestion.lat}-${suggestion.lng}-${index}`}>
+                        <button
+                          type="button"
+                          className="location-suggestion"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => chooseSuggestion(suggestion)}
+                        >
+                          {suggestion.label}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              ) : null}
+            </div>
             <small className="picker-hint">
-              Tap the map to drop a pin. We&apos;ll auto-fill the name; edit to taste.
+              Type to search{city === "sg" ? " (block numbers work too)" : ""}, or tap the map to drop a pin.
             </small>
           </div>
         </div>
@@ -2747,6 +2826,70 @@ function PostLocationPicker({
   }, [pickedLat, pickedLng]);
 
   return <div ref={containerRef} className="post-run-map" />;
+}
+
+const CITY_COUNTRY: Record<CitySlug, string> = { sg: "sg", bcn: "es", par: "fr", ber: "de" };
+
+type LocationSuggestion = { label: string; lat: number; lng: number };
+
+async function forwardGeocode(query: string, city: CitySlug): Promise<LocationSuggestion[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const bounds = CITY_BOUNDS[city];
+  // Singapore-specific: bare digits/short alphanumerics typically refer to an HDB block;
+  // prefix "Block" so Nominatim resolves "88" or "123A" to the right building.
+  const isSgBlock = city === "sg" && /^\d+[a-zA-Z]?$/.test(trimmed);
+  const q = isSgBlock ? `Block ${trimmed} Singapore` : trimmed;
+  const params = new URLSearchParams({
+    q,
+    format: "json",
+    limit: "5",
+    addressdetails: "1",
+    countrycodes: CITY_COUNTRY[city],
+    viewbox: `${bounds.west},${bounds.north},${bounds.east},${bounds.south}`,
+    bounded: "1",
+  });
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as Array<{
+      display_name: string;
+      lat: string;
+      lon: string;
+      name?: string;
+      address?: Record<string, string>;
+    }>;
+    return data
+      .map((row) => {
+        const addr = row.address ?? {};
+        const primary =
+          row.name ||
+          addr.attraction ||
+          addr.park ||
+          addr.leisure ||
+          addr.tourism ||
+          addr.road ||
+          addr.suburb ||
+          addr.neighbourhood ||
+          row.display_name.split(",")[0];
+        const context = row.display_name
+          .split(",")
+          .slice(1, 3)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join(", ");
+        const cleanedPrimary = primary?.trim() || row.display_name;
+        const label = context ? `${cleanedPrimary} — ${context}` : cleanedPrimary;
+        const lat = Number(row.lat);
+        const lng = Number(row.lon);
+        return { label, lat, lng };
+      })
+      .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng));
+  } catch {
+    return [];
+  }
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
