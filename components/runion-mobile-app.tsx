@@ -44,7 +44,9 @@ type AppState = "loading" | "auth" | "onboarding" | "runs";
 type RunsTab = "map" | "post" | "runs";
 type SheetState = "hidden" | "peek" | "full";
 type LocationStatus = "idle" | "locating" | "found" | "denied" | "unavailable";
-type MapRunFilter = "all" | "my_pace" | "today" | "has_space" | "social" | "tempo";
+type MapRunFilter = "all" | "near_me" | "my_pace" | "today" | "has_space" | "social" | "tempo";
+
+const NEAR_ME_RADIUS_M = 2000;
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social" | "consistency";
@@ -162,6 +164,7 @@ const groupSizes: { value: PreferredGroupSize; label: string; recommended?: bool
 
 const mapRunFilters: { value: MapRunFilter; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "near_me", label: "Near me" },
   { value: "my_pace", label: "My pace" },
   { value: "today", label: "Today" },
   { value: "has_space", label: "Has space" },
@@ -2228,7 +2231,10 @@ function MatchedRunsMap({
     youMarker: import("leaflet").Marker;
     markers: import("leaflet").Marker[];
   } | null>(null);
-  const filteredRuns = useMemo(() => runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile)), [activeFilter, runs, profile]);
+  const filteredRuns = useMemo(() => {
+    const ctx = { userLocation: locationStatus === "found" ? userLocation : null };
+    return runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile, ctx));
+  }, [activeFilter, runs, profile, locationStatus, userLocation]);
 
   useEffect(() => {
     setUserLocation(cityConf.youLL);
@@ -2239,10 +2245,9 @@ function MatchedRunsMap({
   useEffect(() => {
     let cancelled = false;
     setRunsStatus("loading");
-    const hasUserLoc = locationStatus === "found";
-    const lat = hasUserLoc ? userLocation[0] : undefined;
-    const lng = hasUserLoc ? userLocation[1] : undefined;
-    fetchOpenRuns(supabase, { city, lat, lng, radiusM: 2000 })
+    // Always fetch the full city list. The "Near me" 2 km filter is applied
+    // client-side so flipping back to "All" doesn't require a refetch.
+    fetchOpenRuns(supabase, { city })
       .then((rows) => {
         if (cancelled) return;
         setRuns(rows);
@@ -2255,7 +2260,7 @@ function MatchedRunsMap({
     return () => {
       cancelled = true;
     };
-  }, [supabase, city, locationStatus, userLocation, refreshKey]);
+  }, [supabase, city, refreshKey]);
 
   // Subscribe to live changes for the current city. Best-effort: silent if
   // realtime isn't configured or the channel errors.
@@ -2398,6 +2403,7 @@ function MatchedRunsMap({
         const nextLocation: [number, number] = [position.coords.latitude, position.coords.longitude];
         setUserLocation(nextLocation);
         setLocationStatus("found");
+        setActiveFilter("near_me");
         leafletRef.current?.youMarker.setLatLng(nextLocation);
         leafletRef.current?.map.flyTo(nextLocation, 15, { duration: 0.7 });
       },
@@ -2558,7 +2564,12 @@ function MatchedRunsMap({
               type="button"
               className={`fpill ${activeFilter === filter.value ? "active" : ""}`}
               aria-pressed={activeFilter === filter.value}
-              onClick={() => setActiveFilter(filter.value)}
+              onClick={() => {
+                setActiveFilter(filter.value);
+                if (filter.value === "near_me" && locationStatus !== "found" && locationStatus !== "locating") {
+                  findMyLocation();
+                }
+              }}
             >
               {filter.label}
             </button>
@@ -2677,8 +2688,18 @@ function MatchedRunCard({
   );
 }
 
-function runMatchesMapFilter(run: RunRow, filter: MapRunFilter, profile: OnboardingDraft) {
+function runMatchesMapFilter(
+  run: RunRow,
+  filter: MapRunFilter,
+  profile: OnboardingDraft,
+  context: { userLocation: [number, number] | null }
+) {
   if (filter === "all") return true;
+  if (filter === "near_me") {
+    if (!context.userLocation) return false;
+    const distance = haversineMeters(context.userLocation[0], context.userLocation[1], run.lat, run.lng);
+    return distance <= NEAR_ME_RADIUS_M;
+  }
   if (filter === "my_pace") {
     const center = profile.comfortable_pace_seconds_per_km ?? 315;
     const min = profile.comfortable_pace_min_seconds_per_km ?? center - 15;
@@ -2696,6 +2717,17 @@ function runMatchesMapFilter(run: RunRow, filter: MapRunFilter, profile: Onboard
   if (filter === "social") return run.intent === "social";
   if (filter === "tempo") return run.intent === "tempo";
   return true;
+}
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function locationStatusLabel(status: LocationStatus) {
