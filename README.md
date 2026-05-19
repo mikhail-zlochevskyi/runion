@@ -47,14 +47,15 @@ All inserted rows carry `is_seed=true`. When anyone requests a spot on a seeded 
 
 If the trigger can't reach the edge function, `npm run seed:test-runs:drain` empties the queue manually — same email, same content.
 
-To wire the immediate-fire path, set the GUCs once per project:
-
-```sql
-alter database postgres set app.settings.functions_url = 'https://<project-ref>.supabase.co/functions/v1';
-alter database postgres set app.settings.service_role_key = '<service-role-jwt>';
-```
-
 Deploy the function with `supabase functions deploy seed-join-notify`.
+
+To make join alerts fire instantly without running `--drain`, use a Supabase **Database Webhook** (Dashboard → Database → Webhooks):
+
+- Table: `run_participants`, Events: `INSERT`
+- Type: Supabase Edge Function, target: `seed-join-notify`
+- Method: POST, default auth header is fine
+
+The function ignores joins on non-seed runs, so the webhook is safe to leave on globally.
 
 ## Onboarding Flow
 
