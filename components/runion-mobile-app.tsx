@@ -733,8 +733,8 @@ function OnboardingStep({
 
   if (step === 1) {
     const paceRange = normalizePaceRange(draft);
-    const minPercent = ((paceRange.min - 270) / 150) * 100;
-    const maxPercent = ((paceRange.max - 270) / 150) * 100;
+    const minPercent = ((paceRange.min - 180) / 300) * 100;
+    const maxPercent = ((paceRange.max - 180) / 300) * 100;
 
     return (
       <div className="step-card">
@@ -760,8 +760,8 @@ function OnboardingStep({
             <input
               aria-label="Minimum comfortable pace"
               type="range"
-              min={270}
-              max={420}
+              min={180}
+              max={480}
               step={15}
               value={paceRange.min}
               onChange={(event) =>
@@ -781,8 +781,8 @@ function OnboardingStep({
             <input
               aria-label="Maximum comfortable pace"
               type="range"
-              min={270}
-              max={420}
+              min={180}
+              max={480}
               step={15}
               value={paceRange.max}
               onChange={(event) =>
@@ -801,8 +801,8 @@ function OnboardingStep({
             />
           </div>
           <div className="slider-labels">
-            <span>4:30</span>
-            <span>7:00</span>
+            <span>3:00</span>
+            <span>8:00</span>
           </div>
         </div>
       </div>
@@ -2731,7 +2731,7 @@ function formatPace(seconds: number) {
 }
 
 function clampPace(seconds: number) {
-  return Math.min(420, Math.max(270, seconds));
+  return Math.min(480, Math.max(180, seconds));
 }
 
 function paceRangeFromCenter(seconds: number) {
