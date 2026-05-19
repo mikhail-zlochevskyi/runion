@@ -852,6 +852,9 @@ button {
 .matches-shell .topbar {
   position: sticky;
   padding-bottom: 16px;
+  pointer-events: auto;
+  background: linear-gradient(180deg, rgba(15, 10, 6, 0.96) 0%, rgba(15, 10, 6, 0.88) 70%, rgba(15, 10, 6, 0) 100%);
+  backdrop-filter: blur(14px);
 }
 
 .entry-panel,
@@ -1749,6 +1752,7 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 6px;
+  min-width: 0;
 }
 
 .requester-social {
@@ -1762,6 +1766,10 @@ button {
   color: var(--cream);
   font-size: 0.72rem;
   text-decoration: none;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .requester-social:hover {
@@ -2056,6 +2064,11 @@ button {
   border-radius: 8px;
   background: rgba(243, 235, 217, 0.055);
   padding: 14px;
+  min-width: 0;
+}
+
+.activity-card > * {
+  min-width: 0;
 }
 
 .activity-card-head,
@@ -2261,6 +2274,9 @@ button {
   color: var(--cream);
   padding: 9px 10px;
   font-size: 0.82rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .run-meta-grid span {

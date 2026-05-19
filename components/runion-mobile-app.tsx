@@ -1775,7 +1775,12 @@ function RequesterSocials({ whatsapp, socials }: { whatsapp?: string; socials?: 
 }
 
 function socialHandle(url: string) {
-  const cleaned = url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  // Drop scheme, trailing slash, and any query/hash so we don't render
+  // tracking params like "?igsh=..." in the chip.
+  const cleaned = url
+    .replace(/^https?:\/\//i, "")
+    .replace(/[?#].*$/, "")
+    .replace(/\/$/, "");
   const segments = cleaned.split("/").filter(Boolean);
   return segments[segments.length - 1] || cleaned;
 }
