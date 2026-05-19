@@ -2120,7 +2120,6 @@ function MatchedRunsMap({
     markers: import("leaflet").Marker[];
   } | null>(null);
   const filteredRuns = useMemo(() => runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile)), [activeFilter, runs, profile]);
-  const activeRun = filteredRuns.find((run) => run.id === activeRunId) ?? filteredRuns[0];
 
   useEffect(() => {
     setUserLocation(cityConf.youLL);
@@ -2480,12 +2479,6 @@ function MatchedRunsMap({
         ) : (
           <div className="run-list-empty">No runs nearby yet. Post the first one.</div>
         )}
-
-        {activeRun ? (
-          <div className="active-run-bar">
-            <span>{activeRun.locationName}</span>
-          </div>
-        ) : null}
       </section>
       <RunionTabNav active="map" onMap={() => undefined} onPost={onPostRun} onRuns={onShowRuns} />
     </main>

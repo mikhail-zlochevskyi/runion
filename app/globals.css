@@ -1802,31 +1802,6 @@ button {
   padding: 12px;
 }
 
-.active-run-bar {
-  position: absolute;
-  right: 14px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
-  left: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(26, 20, 13, 0.92);
-  padding: 10px 12px;
-  backdrop-filter: blur(18px);
-}
-
-.active-run-bar span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--cream);
-  font-size: 0.82rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .runs-shell {
   overflow-y: auto;
 }
