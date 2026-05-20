@@ -1722,9 +1722,11 @@ function HostedRunCard({
       {hosted.confirmedRequests.length ? (
         <div className="approved-contact-list">
           {hosted.confirmedRequests.map((request) => (
-            <div key={request.id} className="approved-contact">
-              <strong>{request.requesterName}</strong>
-              <StatsBadge stats={stats?.[request.userId]} />
+            <div key={request.id} className="approved-contact approved-contact--requester">
+              <div className="approved-contact-header">
+                <strong>{request.requesterName}</strong>
+                <StatsBadge stats={stats?.[request.userId]} />
+              </div>
               <RequesterSocials
                 whatsapp={request.requesterWhatsapp}
                 socials={request.requesterSocials}

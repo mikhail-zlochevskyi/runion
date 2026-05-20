@@ -1718,13 +1718,14 @@ button {
 
 .stats-badge {
   display: inline-block;
-  margin-top: 4px;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(244, 164, 92, 0.12);
   color: var(--sun);
   font-size: 0.7rem;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .activity-card--awaiting {
@@ -2161,6 +2162,29 @@ button {
   background: rgba(244, 164, 92, 0.09);
   color: var(--sun);
   padding: 10px 11px;
+  min-width: 0;
+}
+
+.approved-contact--requester {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.approved-contact-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.approved-contact-header strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .approved-contact svg {
