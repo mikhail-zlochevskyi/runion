@@ -41,7 +41,6 @@ type Props = {
 
 type AuthMode = "magic" | "password";
 type AppState = "loading" | "auth" | "onboarding" | "runs";
-type RunsTab = "map" | "post" | "runs";
 type SheetState = "hidden" | "peek" | "full";
 type LocationStatus = "idle" | "locating" | "found" | "denied" | "unavailable";
 type MapRunFilter = "all" | "near_me" | "my_pace" | "today" | "has_space" | "social" | "tempo";
@@ -701,6 +700,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         supabase={supabase}
         onBack={() => router.push(`/runs#${city}`)}
         onMap={() => router.push(`/map#${city}`)}
+        onRuns={() => router.push(`/runs#${city}`)}
         onPosted={() => {
           router.push(`/runs#${city}`);
         }}
@@ -1112,7 +1112,12 @@ function RunsFeed({
 
   return (
     <main className="app-shell matches-shell runs-shell">
-      <BrandBar onProfile={onProfile} />
+      <BrandBar
+        page="runs"
+        onMap={onOpenMap}
+        onPostRun={onPostRun}
+        onProfile={onProfile}
+      />
       <section className="runs-panel" aria-label="Your runs">
         <header className="runs-header">
           <p className="modal-eyebrow">Your runs</p>
@@ -1211,7 +1216,6 @@ function RunsFeed({
           onSave={(outcomes) => handleWrapUp(recapTarget, outcomes)}
         />
       ) : null}
-      <RunionTabNav active="runs" onMap={onOpenMap} onPost={onPostRun} onRuns={() => undefined} />
     </main>
   );
 }
@@ -1280,7 +1284,12 @@ function ProfileScreen({
 
   return (
     <main className="app-shell matches-shell runs-shell profile-shell">
-      <BrandBar />
+      <BrandBar
+        page="profile"
+        onMap={onMap}
+        onPostRun={onPostRun}
+        onRuns={onRuns}
+      />
       <section className="profile-panel" aria-label="Profile">
         <button className="round-btn" onClick={onBack} aria-label="Back to runs">
           <ArrowLeft size={17} />
@@ -1411,7 +1420,6 @@ function ProfileScreen({
           </button>
         </div>
       </section>
-      <RunionTabNav active="runs" onMap={onMap} onPost={onPostRun} onRuns={onRuns} />
     </main>
   );
 }
@@ -1925,6 +1933,7 @@ function PostRunScreen({
   supabase,
   onBack,
   onMap,
+  onRuns,
   onPosted,
   onProfile
 }: {
@@ -1934,6 +1943,7 @@ function PostRunScreen({
   supabase: ReturnType<typeof createClient>;
   onBack: () => void;
   onMap: () => void;
+  onRuns: () => void;
   onPosted: () => void;
   onProfile: () => void;
 }) {
@@ -2096,7 +2106,12 @@ function PostRunScreen({
 
   return (
     <main className="app-shell matches-shell runs-shell">
-      <BrandBar onProfile={onProfile} />
+      <BrandBar
+        page="post"
+        onMap={onMap}
+        onRuns={onRuns}
+        onProfile={onProfile}
+      />
       <section className="post-run-panel" aria-label="Post a run">
         <button className="round-btn" onClick={onBack} aria-label="Back to runs">
           <ArrowLeft size={17} />
@@ -2231,7 +2246,6 @@ function PostRunScreen({
           {busy ? "Posting..." : "Post run"}
         </button>
       </section>
-      <RunionTabNav active="post" onMap={onMap} onPost={() => undefined} onRuns={onBack} />
     </main>
   );
 }
@@ -2546,25 +2560,14 @@ function MatchedRunsMap({
 
   return (
     <main className="app-shell">
-      <div className="topbar">
-        <div className="logo" aria-label="runion">
-          <LogoMark />
-          runi<span>o</span>n
-        </div>
-        <div className="topbar-actions">
-          <button
-            className={`icon-btn ${locationStatus === "locating" ? "loading" : ""} ${locationStatus === "found" ? "found" : ""}`}
-            aria-label="Find my location"
-            onClick={findMyLocation}
-            disabled={locationStatus === "locating"}
-          >
-            <LocateFixed size={17} />
-          </button>
-          <button className="icon-btn profile-icon-btn" aria-label="Open profile" onClick={onProfile}>
-            <UserRound size={17} />
-          </button>
-        </div>
-      </div>
+      <BrandBar
+        page="map"
+        onLocate={findMyLocation}
+        locationStatus={locationStatus}
+        onPostRun={onPostRun}
+        onRuns={onShowRuns}
+        onProfile={onProfile}
+      />
 
       {locationStatus !== "idle" ? <div className={`location-toast ${locationStatus}`}>{locationStatusLabel(locationStatus)}</div> : null}
       {mapNotice ? <div className="location-toast found">{mapNotice}</div> : null}
@@ -2646,37 +2649,7 @@ function MatchedRunsMap({
           <div className="run-list-empty">No runs nearby yet. Post the first one.</div>
         )}
       </section>
-      <RunionTabNav active="map" onMap={() => undefined} onPost={onPostRun} onRuns={onShowRuns} />
     </main>
-  );
-}
-
-function RunionTabNav({
-  active,
-  onMap,
-  onPost,
-  onRuns
-}: {
-  active: RunsTab;
-  onMap: () => void;
-  onPost: () => void;
-  onRuns: () => void;
-}) {
-  return (
-    <nav className="bottom-nav runion-tabs" aria-label="Runion navigation">
-      <button className={active === "map" ? "active" : ""} onClick={onMap} aria-current={active === "map" ? "page" : undefined}>
-        <MapPin size={17} />
-        Map
-      </button>
-      <button className={active === "post" ? "active" : ""} onClick={onPost} aria-current={active === "post" ? "page" : undefined}>
-        <Plus size={17} />
-        Post
-      </button>
-      <button className={active === "runs" ? "active" : ""} onClick={onRuns} aria-current={active === "runs" ? "page" : undefined}>
-        <Check size={17} />
-        Runs
-      </button>
-    </nav>
   );
 }
 
@@ -2788,18 +2761,62 @@ function locationStatusLabel(status: LocationStatus) {
   return labels[status];
 }
 
-function BrandBar({ onProfile }: { onProfile?: () => void }) {
+function BrandBar({
+  page = "other",
+  onMap,
+  onPostRun,
+  onRuns,
+  onProfile,
+  onLocate,
+  locationStatus,
+}: {
+  page?: "map" | "runs" | "post" | "profile" | "other";
+  onMap?: () => void;
+  onPostRun?: () => void;
+  onRuns?: () => void;
+  onProfile?: () => void;
+  onLocate?: () => void;
+  locationStatus?: LocationStatus;
+}) {
   return (
     <div className="topbar">
       <div className="logo" aria-label="runion">
         <LogoMark />
         runi<span>o</span>n
       </div>
-      {onProfile ? (
-        <button className="icon-btn profile-icon-btn" aria-label="Open profile" onClick={onProfile}>
-          <UserRound size={17} />
-        </button>
-      ) : null}
+      <div className="topbar-actions">
+        {page === "map" && onLocate ? (
+          <button
+            className={`icon-btn ${locationStatus === "locating" ? "loading" : ""} ${locationStatus === "found" ? "found" : ""}`}
+            aria-label="Find my location"
+            onClick={onLocate}
+            disabled={locationStatus === "locating"}
+            type="button"
+          >
+            <LocateFixed size={17} />
+          </button>
+        ) : null}
+        {page !== "map" && onMap ? (
+          <button className="icon-btn" aria-label="Open map" onClick={onMap} type="button">
+            <MapPin size={17} />
+          </button>
+        ) : null}
+        {page !== "post" && onPostRun ? (
+          <button className="icon-btn" aria-label="Post a run" onClick={onPostRun} type="button">
+            <Plus size={17} />
+          </button>
+        ) : null}
+        {page !== "runs" && onRuns ? (
+          <button className="icon-btn" aria-label="My runs" onClick={onRuns} type="button">
+            <Check size={17} />
+          </button>
+        ) : null}
+        {page !== "profile" && onProfile ? (
+          <button className="icon-btn profile-icon-btn" aria-label="Open profile" onClick={onProfile} type="button">
+            <UserRound size={17} />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
