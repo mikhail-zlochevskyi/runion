@@ -1141,7 +1141,6 @@ function RunsFeed({
                   item={item}
                   badge="Confirmed"
                   note={item.run.participants}
-                  cta="View details"
                   hostStats={item.hostOrganiserId ? stats[item.hostOrganiserId] : undefined}
                   viewerName={profile.name}
                   showApprovedContact
@@ -1151,7 +1150,7 @@ function RunsFeed({
 
             <ActivitySection title="Pending requests" empty="No pending requests.">
               {activity.pending.map((item) => (
-                <ActivityRunCard key={item.id} item={item} badge="Requested" note="Waiting for host approval" cta="View" />
+                <ActivityRunCard key={item.id} item={item} badge="Requested" note="Waiting for host approval" />
               ))}
             </ActivitySection>
 
@@ -1573,7 +1572,6 @@ function ActivityRunCard({
   item,
   badge,
   note,
-  cta,
   hostStats,
   viewerName,
   showApprovedContact = false
@@ -1581,7 +1579,6 @@ function ActivityRunCard({
   item: RunParticipantActivity;
   badge: string;
   note: string;
-  cta: string;
   hostStats?: UserStats;
   viewerName?: string;
   showApprovedContact?: boolean;
@@ -1590,7 +1587,6 @@ function ActivityRunCard({
     <article className="activity-card">
       <div className="activity-card-head">
         <span className="status-badge">{badge}</span>
-        <button className="text-btn">{cta}</button>
       </div>
       <h3>{item.run.title}</h3>
       <RunFactGrid run={item.run} />
