@@ -67,6 +67,7 @@ type CoreRun = {
   currentSpots: number;
   status: string;
   organiserId?: string;
+  recurrence?: "weekly" | null;
   source: "db" | "mock" | "local";
 };
 
@@ -103,6 +104,7 @@ type PostRunDraft = {
   locationName: string;
   pickedLat: number | null;
   pickedLng: number | null;
+  recurring: boolean;
 };
 
 const CITY_BOUNDS: Record<CitySlug, { south: number; west: number; north: number; east: number }> = {
@@ -1701,7 +1703,10 @@ function HostedRunCard({
   return (
     <article className={`activity-card hosted-card${isPast ? " hosted-card--past" : ""}`}>
       <div className="activity-card-head">
-        <span className={`status-badge host${isPast ? " status-badge--past" : ""}`}>{badge}</span>
+        <span className="activity-card-badges">
+          <span className={`status-badge host${isPast ? " status-badge--past" : ""}`}>{badge}</span>
+          {hosted.run.recurrence === "weekly" ? <span className="weekly-pill">WEEKLY</span> : null}
+        </span>
         {!isPast && onWrapUp && hasStarted ? (
           <button className="text-btn text-btn--accent" onClick={() => onWrapUp(hosted)}>Wrap up</button>
         ) : !isPast && onCancel && !hasStarted ? (
@@ -1953,6 +1958,7 @@ function PostRunScreen({
     locationName: "",
     pickedLat: null,
     pickedLng: null,
+    recurring: false,
   }));
   // Buffered strings so iOS numeric keyboards can edit freely (clear,
   // partial input, etc.) without React snapping the value back every
@@ -2090,6 +2096,7 @@ function PostRunScreen({
         distanceKm,
         intent: draft.intent,
         maxGroupSize: 3,
+        recurrence: draft.recurring ? "weekly" : null,
       },
       profileId
     );
@@ -2154,6 +2161,18 @@ function PostRunScreen({
               onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" })}
               onBlur={commitDistance}
             />
+          </label>
+          <label className={`recurrence-toggle${draft.recurring ? " recurrence-toggle--on" : ""}`}>
+            <input
+              type="checkbox"
+              checked={draft.recurring}
+              onChange={(event) => setDraft((current) => ({ ...current, recurring: event.target.checked }))}
+            />
+            <span className="recurrence-toggle-copy">
+              <strong>Repeat weekly</strong>
+              <small>Posts the same time and place every week. People can rejoin each round.</small>
+            </span>
+            <span className="recurrence-toggle-switch" aria-hidden="true" />
           </label>
           <div className="post-run-intent-field">
             <div className="post-run-intent-heading">
@@ -2674,7 +2693,10 @@ function MatchedRunCard({
     <article className={`run-card matched-map-card ${active ? "active" : ""} ${requested ? "requested" : ""}`}>
       <button className="matched-card-main" onClick={onSelect}>
         <span className="match-topline">
-          <span>{level}</span>
+          <span>
+            {level}
+            {run.recurrence === "weekly" ? <span className="weekly-pill">WEEKLY</span> : null}
+          </span>
           <strong>
             {runDayLabel(run.startTime)} {runTimeLabel(run.startTime)}
           </strong>
@@ -2943,6 +2965,7 @@ function runRowToCoreRun(run: RunRow): CoreRun {
     currentSpots: run.currentSpots,
     status: run.status,
     organiserId: run.organiserId ?? undefined,
+    recurrence: run.recurrence ?? null,
     source: "db",
   };
 }

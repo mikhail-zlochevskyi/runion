@@ -1728,6 +1728,98 @@ button {
   flex: 0 0 auto;
 }
 
+.weekly-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(244, 164, 92, 0.18);
+  border: 1px solid rgba(244, 164, 92, 0.4);
+  color: var(--sun);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.activity-card-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recurrence-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.04);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.recurrence-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.recurrence-toggle-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recurrence-toggle-copy strong {
+  color: var(--cream);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.recurrence-toggle-copy small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.recurrence-toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(243, 235, 217, 0.12);
+  flex: 0 0 auto;
+  transition: background 0.15s;
+}
+
+.recurrence-toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cream);
+  transition: transform 0.15s;
+}
+
+.recurrence-toggle--on {
+  border-color: rgba(244, 164, 92, 0.5);
+  background: rgba(244, 164, 92, 0.08);
+}
+
+.recurrence-toggle--on .recurrence-toggle-switch {
+  background: var(--terracotta);
+}
+
+.recurrence-toggle--on .recurrence-toggle-switch::after {
+  transform: translateX(16px);
+}
+
 .activity-card--awaiting {
   border-color: rgba(244, 164, 92, 0.55);
   box-shadow: 0 0 0 1px rgba(244, 164, 92, 0.18);

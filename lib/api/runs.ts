@@ -23,6 +23,7 @@ export type RunRow = {
   maxGroupSize: number;
   currentSpots: number;
   status: string;
+  recurrence?: "weekly" | null;
 };
 
 export type CreateRunInput = {
@@ -37,12 +38,13 @@ export type CreateRunInput = {
   distanceKm: number;
   intent: RunIntent;
   maxGroupSize?: number;
+  recurrence?: "weekly" | null;
 };
 
 type SB = NonNullable<ReturnType<typeof createClient>>;
 
 const FETCH_COLUMNS =
-  "id, city, title, description, location_name, location_lat, location_lng, start_time, run_date, time, pace_seconds, pace_min, pace_max, distance_km, intent, goal, organiser_id, max_group_size, current_spots, spots_total, spots_taken, status";
+  "id, city, title, description, location_name, location_lat, location_lng, start_time, run_date, time, pace_seconds, pace_min, pace_max, distance_km, intent, goal, organiser_id, max_group_size, current_spots, spots_total, spots_taken, status, recurrence";
 
 async function sweepStaleRuns(supabase: SB) {
   await supabase.rpc("expire_stale_runs").then(() => undefined, () => undefined);
@@ -134,6 +136,7 @@ export async function createRun(
     spots_total: groupSize,
     spots_taken: 1,
     status: "active",
+    recurrence: input.recurrence ?? null,
   };
 
   const { data, error } = await supabase.from("runs").insert(payload).select("id").single();
@@ -504,6 +507,7 @@ function toRunRow(row: Record<string, unknown>, fallbackCity: CitySlug): RunRow 
     maxGroupSize: numberFromValue(row.max_group_size) ?? numberFromValue(row.spots_total) ?? 3,
     currentSpots: numberFromValue(row.current_spots) ?? numberFromValue(row.spots_taken) ?? 1,
     status: stringFromValue(row.status) ?? "active",
+    recurrence: stringFromValue(row.recurrence) === "weekly" ? "weekly" : null,
   };
 }
 
