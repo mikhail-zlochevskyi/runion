@@ -68,6 +68,7 @@ type CoreRun = {
   status: string;
   organiserId?: string;
   recurrence?: "weekly" | null;
+  womenOnly?: boolean;
   source: "db" | "mock" | "local";
 };
 
@@ -105,6 +106,7 @@ type PostRunDraft = {
   pickedLat: number | null;
   pickedLng: number | null;
   recurring: boolean;
+  womenOnly: boolean;
 };
 
 const CITY_BOUNDS: Record<CitySlug, { south: number; west: number; north: number; east: number }> = {
@@ -121,6 +123,8 @@ function isWithinCity(city: CitySlug, lat: number, lng: number) {
 
 const STORAGE_KEY = "runion.preview.profile";
 const WHATSAPP_PRIVACY_COPY = "Shared with hosts only after they approve your request, so you can coordinate. Not public.";
+const REPORT_CONTACT_WHATSAPP = "+6581174827";
+const REPORT_CONTACT_PREFILL = "Hi runion team, I want to report an issue:";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
   tempo: "TEMPO",
@@ -1415,6 +1419,15 @@ function ProfileScreen({
             <Save size={17} />
             {busy ? "Saving..." : "Save changes"}
           </button>
+          <a
+            className="report-link"
+            href={whatsappHref(REPORT_CONTACT_WHATSAPP, REPORT_CONTACT_PREFILL)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MessageCircle size={15} />
+            Report a problem or contact runion
+          </a>
           <button className="logout-cta" onClick={onSignOut}>
             <LogOut size={17} />
             Log out
@@ -1706,6 +1719,7 @@ function HostedRunCard({
         <span className="activity-card-badges">
           <span className={`status-badge host${isPast ? " status-badge--past" : ""}`}>{badge}</span>
           {hosted.run.recurrence === "weekly" ? <span className="weekly-pill">WEEKLY</span> : null}
+          {hosted.run.womenOnly ? <span className="women-only-pill">WOMEN ONLY</span> : null}
         </span>
         {!isPast && onWrapUp && hasStarted ? (
           <button className="text-btn text-btn--accent" onClick={() => onWrapUp(hosted)}>Wrap up</button>
@@ -1959,6 +1973,7 @@ function PostRunScreen({
     pickedLat: null,
     pickedLng: null,
     recurring: false,
+    womenOnly: false,
   }));
   // Buffered strings so iOS numeric keyboards can edit freely (clear,
   // partial input, etc.) without React snapping the value back every
@@ -2097,6 +2112,7 @@ function PostRunScreen({
         intent: draft.intent,
         maxGroupSize: 3,
         recurrence: draft.recurring ? "weekly" : null,
+        womenOnly: draft.womenOnly,
       },
       profileId
     );
@@ -2171,6 +2187,18 @@ function PostRunScreen({
             <span className="recurrence-toggle-copy">
               <strong>Repeat weekly</strong>
               <small>Posts the same time and place every week. People can rejoin each round.</small>
+            </span>
+            <span className="recurrence-toggle-switch" aria-hidden="true" />
+          </label>
+          <label className={`recurrence-toggle${draft.womenOnly ? " recurrence-toggle--on recurrence-toggle--safety" : ""}`}>
+            <input
+              type="checkbox"
+              checked={draft.womenOnly}
+              onChange={(event) => setDraft((current) => ({ ...current, womenOnly: event.target.checked }))}
+            />
+            <span className="recurrence-toggle-copy">
+              <strong>Women-only run</strong>
+              <small>Flag this run as women-only. Visible to everyone for transparency.</small>
             </span>
             <span className="recurrence-toggle-switch" aria-hidden="true" />
           </label>
@@ -2696,6 +2724,7 @@ function MatchedRunCard({
           <span>
             {level}
             {run.recurrence === "weekly" ? <span className="weekly-pill">WEEKLY</span> : null}
+            {run.womenOnly ? <span className="women-only-pill">WOMEN ONLY</span> : null}
           </span>
           <strong>
             {runDayLabel(run.startTime)} {runTimeLabel(run.startTime)}
@@ -2966,6 +2995,7 @@ function runRowToCoreRun(run: RunRow): CoreRun {
     status: run.status,
     organiserId: run.organiserId ?? undefined,
     recurrence: run.recurrence ?? null,
+    womenOnly: run.womenOnly ?? false,
     source: "db",
   };
 }

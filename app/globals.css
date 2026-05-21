@@ -1743,6 +1743,50 @@ button {
   vertical-align: middle;
 }
 
+.women-only-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(232, 156, 156, 0.16);
+  border: 1px solid rgba(232, 156, 156, 0.45);
+  color: var(--rose);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.recurrence-toggle--safety {
+  border-color: rgba(232, 156, 156, 0.55);
+  background: rgba(232, 156, 156, 0.08);
+}
+
+.recurrence-toggle--safety .recurrence-toggle-switch {
+  background: var(--rose);
+}
+
+.report-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.report-link:hover {
+  border-color: rgba(244, 164, 92, 0.4);
+  color: var(--cream);
+}
+
 .activity-card-badges {
   display: inline-flex;
   align-items: center;
