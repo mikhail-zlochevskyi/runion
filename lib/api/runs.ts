@@ -1,7 +1,7 @@
 import type { CitySlug } from "@/lib/types";
 import type { createClient } from "@/lib/supabase/client";
 
-export type RunIntent = "tempo" | "social" | "consistency";
+export type RunIntent = "tempo" | "social";
 
 export type RunRow = {
   id: string;
@@ -561,14 +561,13 @@ export function timeLabel(startTime: string) {
 
 function titleFromIntent(intent: RunIntent) {
   if (intent === "tempo") return "Tempo run";
-  if (intent === "consistency") return "Consistency run";
   return "Social run";
 }
 
 function normalizeIntent(value?: string | null): RunIntent {
   const lower = value?.toLowerCase() ?? "";
   if (lower.includes("tempo") || lower.includes("performance") || lower.includes("hill")) return "tempo";
-  if (lower.includes("consistent") || lower.includes("steady")) return "consistency";
+  // Legacy "consistency" rows collapse into "social" so old data stays renderable.
   return "social";
 }
 

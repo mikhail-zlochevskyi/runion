@@ -63,7 +63,7 @@ const RUN_CONFIGS = [
     title: "Ciutadella loop",
     locationName: "Parc de la Ciutadella",
     lat: 41.3851, lng: 2.1864,
-    intent: "consistency", paceSeconds: 345, distanceKm: 5,
+    intent: "social", paceSeconds: 345, distanceKm: 5,
     startOffsetHours: 38,
   },
   {
@@ -95,7 +95,7 @@ const RUN_CONFIGS = [
     title: "Carretera de les Aigües",
     locationName: "Carretera de les Aigües trailhead",
     lat: 41.4233, lng: 2.1158,
-    intent: "consistency", paceSeconds: 315, distanceKm: 10,
+    intent: "social", paceSeconds: 315, distanceKm: 10,
     startOffsetHours: 104,
   },
   {
@@ -128,7 +128,7 @@ const RUN_CONFIGS = [
     title: "Bukit Timah trail",
     locationName: "Bukit Timah Nature Reserve",
     lat: 1.3536, lng: 103.7763,
-    intent: "consistency", paceSeconds: 360, distanceKm: 7,
+    intent: "social", paceSeconds: 360, distanceKm: 7,
     startOffsetHours: 70,
   },
   {
@@ -144,7 +144,7 @@ const RUN_CONFIGS = [
     title: "MacRitchie reservoir",
     locationName: "MacRitchie Reservoir Park",
     lat: 1.3415, lng: 103.8259,
-    intent: "consistency", paceSeconds: 330, distanceKm: 10,
+    intent: "social", paceSeconds: 330, distanceKm: 10,
     startOffsetHours: 96,
   },
   {

@@ -48,7 +48,7 @@ type MapRunFilter = "all" | "near_me" | "my_pace" | "today" | "has_space" | "soc
 const NEAR_ME_RADIUS_M = 2000;
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
-type CoreIntent = "tempo" | "social" | "consistency";
+type CoreIntent = "tempo" | "social";
 type ParticipantStatus = "requested" | "confirmed" | "declined";
 type CoreRun = {
   id: string;
@@ -128,14 +128,12 @@ const REPORT_CONTACT_PREFILL = "Hi runion team, I want to report an issue:";
 const SHEET_STATES: SheetState[] = ["hidden", "peek", "full"];
 const intentLabels: Record<CoreIntent, string> = {
   tempo: "TEMPO",
-  social: "SOCIAL",
-  consistency: "CONSISTENCY"
+  social: "SOCIAL"
 };
 
 const postRunIntentChoices: { value: CoreIntent; headline: string; detail: string }[] = [
   { value: "tempo", headline: "TEMPO", detail: "Quality work — harder pace or intervals." },
-  { value: "social", headline: "SOCIAL", detail: "Easy miles and conversation." },
-  { value: "consistency", headline: "CONSISTENCY", detail: "Steady habit — show up, lock it in." }
+  { value: "social", headline: "SOCIAL", detail: "Easy miles and conversation." }
 ];
 
 const runnerTypes: { value: RunnerType; label: string; detail: string }[] = [
@@ -2919,14 +2917,13 @@ function hasRunActivity(activity: { pending: RunParticipantActivity[]; confirmed
 
 function titleFromIntent(intent: CoreIntent) {
   if (intent === "tempo") return "Tempo run";
-  if (intent === "consistency") return "Consistency run";
   return "Social run";
 }
 
 function normalizeIntent(value?: string): CoreIntent {
   const lower = value?.toLowerCase() ?? "";
   if (lower.includes("tempo") || lower.includes("performance") || lower.includes("speed") || lower.includes("event") || lower.includes("hill")) return "tempo";
-  if (lower.includes("routine") || lower.includes("consistent") || lower.includes("steady") || lower.includes("accountable")) return "consistency";
+  // Legacy "consistency" runs collapse into social so historical rows stay renderable.
   return "social";
 }
 
@@ -2938,7 +2935,6 @@ function normalizeParticipantStatus(value?: string): ParticipantStatus | null {
 
 function profileIntentToCoreIntent(intent: RunIntent): CoreIntent {
   if (intent === "improve_speed" || intent === "train_event") return "tempo";
-  if (intent === "build_routine" || intent === "increase_distance" || intent === "stay_accountable") return "consistency";
   return "social";
 }
 
