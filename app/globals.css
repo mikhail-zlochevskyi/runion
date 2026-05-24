@@ -106,6 +106,18 @@ button {
   font-style: italic;
 }
 
+.logo-btn {
+  cursor: pointer;
+  color: var(--cream);
+  font: inherit;
+}
+
+.logo-btn:hover,
+.logo-btn:focus-visible {
+  border-color: rgba(244, 164, 92, 0.4);
+  outline: none;
+}
+
 .logo span,
 .sheet-header span,
 .modal h2 span {
@@ -285,6 +297,10 @@ button {
 
 .sheet.full {
   transform: translateY(0);
+  /* Pin the sheet to its full size so the run-list (flex: 1) actually
+     fills the remaining height; otherwise the sheet sized to its content
+     and left a dead gap below the last card. */
+  height: 88vh;
 }
 
 .sheet.hidden {
@@ -298,22 +314,22 @@ button {
 
 .drag-handle {
   position: relative;
-  width: 36px;
-  height: 4px;
+  width: 44px;
+  height: 5px;
   flex: 0 0 auto;
   margin: 10px auto 0;
   border: 0;
-  border-radius: 2px;
-  background: rgba(243, 235, 217, 0.25);
+  border-radius: 3px;
+  background: rgba(243, 235, 217, 0.4);
   cursor: grab;
   touch-action: none;
 }
 
 .drag-handle::before {
   position: absolute;
-  top: -16px;
+  top: -20px;
   right: -160px;
-  bottom: -16px;
+  bottom: -12px;
   left: -160px;
   content: "";
 }
@@ -405,7 +421,9 @@ button {
 .run-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px 96px;
+  /* Bottom padding used to be 96px to clear the old floating tab bar;
+     that's gone now. Keep a small breathing room above the safe-area. */
+  padding: 0 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
   scrollbar-width: none;
 }
 

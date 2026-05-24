@@ -1120,6 +1120,7 @@ function RunsFeed({
     <main className="app-shell matches-shell runs-shell">
       <BrandBar
         page="runs"
+        onLogo={onOpenMap}
         onMap={onOpenMap}
         onPostRun={onPostRun}
         onProfile={onProfile}
@@ -1291,6 +1292,7 @@ function ProfileScreen({
     <main className="app-shell matches-shell runs-shell profile-shell">
       <BrandBar
         page="profile"
+        onLogo={onMap}
         onMap={onMap}
         onPostRun={onPostRun}
         onRuns={onRuns}
@@ -2096,6 +2098,7 @@ function PostRunScreen({
     <main className="app-shell matches-shell runs-shell">
       <BrandBar
         page="post"
+        onLogo={onMap}
         onMap={onMap}
         onRuns={onRuns}
         onProfile={onProfile}
@@ -2589,6 +2592,12 @@ function MatchedRunsMap({
     <main className="app-shell">
       <BrandBar
         page="map"
+        onLogo={() => {
+          // On map already — recentre on the city and snap the sheet
+          // back to peek so the user can see the map again.
+          leafletRef.current?.map.flyTo(cityConf.center, cityConf.zoom, { duration: 0.6 });
+          setSheetState("peek");
+        }}
         onLocate={findMyLocation}
         locationStatus={locationStatus}
         onPostRun={onPostRun}
@@ -2799,6 +2808,7 @@ function BrandBar({
   onRuns,
   onProfile,
   onLocate,
+  onLogo,
   locationStatus,
 }: {
   page?: "map" | "runs" | "post" | "profile" | "other";
@@ -2807,14 +2817,32 @@ function BrandBar({
   onRuns?: () => void;
   onProfile?: () => void;
   onLocate?: () => void;
+  onLogo?: () => void;
   locationStatus?: LocationStatus;
 }) {
+  const logoHandler = onLogo ?? onMap;
+  const LogoContent = (
+    <>
+      <LogoMark />
+      runi<span>o</span>n
+    </>
+  );
   return (
     <div className="topbar">
-      <div className="logo" aria-label="runion">
-        <LogoMark />
-        runi<span>o</span>n
-      </div>
+      {logoHandler ? (
+        <button
+          type="button"
+          className="logo logo-btn"
+          aria-label="Go to map"
+          onClick={logoHandler}
+        >
+          {LogoContent}
+        </button>
+      ) : (
+        <div className="logo" aria-label="runion">
+          {LogoContent}
+        </div>
+      )}
       <div className="topbar-actions">
         {page === "map" && onLocate ? (
           <button
