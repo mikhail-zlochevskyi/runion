@@ -106,10 +106,17 @@ button {
   font-style: italic;
 }
 
+/* Button variant of the logo: keep the .logo font/colour/background but
+   reset the button-specific UA quirks (extra padding, default font) so
+   it looks identical to the static .logo div it replaces. */
 .logo-btn {
   cursor: pointer;
+  font-family: var(--font-fraunces), serif;
+  font-size: 1.1rem;
+  font-style: italic;
   color: var(--cream);
-  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .logo-btn:hover,
