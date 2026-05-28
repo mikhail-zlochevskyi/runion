@@ -867,6 +867,7 @@ function OnboardingStep({
             <span>8:00</span>
           </div>
         </div>
+        <p className="step-hint">Approximate is fine — you can update it anytime in your profile.</p>
       </div>
     );
   }
@@ -2720,7 +2721,25 @@ function MatchedRunsMap({
             ))}
           </div>
         ) : runs.length ? (
-          <div className="run-list-empty">No runs match this filter yet.</div>
+          activeFilter === "my_pace" ? (
+            <div className="run-list-empty">
+              <p>
+                No runs in your pace range ({formatPace(normalizePaceRange(profile).min)}–
+                {formatPace(normalizePaceRange(profile).max)}/km) right now.
+              </p>
+              <p className="run-list-empty-sub">
+                That range is approximate — tweak it anytime in your profile.
+              </p>
+              <button className="text-btn" onClick={onProfile}>Update your pace</button>
+            </div>
+          ) : activeFilter === "near_me" ? (
+            <div className="run-list-empty">
+              <p>No runs within 2 km of you.</p>
+              <button className="text-btn" onClick={() => setActiveFilter("all")}>See all runs</button>
+            </div>
+          ) : (
+            <div className="run-list-empty">No runs match this filter yet.</div>
+          )
         ) : (
           <div className="run-list-empty">No runs nearby yet. Post the first one.</div>
         )}

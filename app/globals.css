@@ -1586,9 +1586,29 @@ button {
 }
 
 .run-list-empty {
-  padding: 24px 20px 136px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 20px 40px;
   color: rgba(255, 255, 255, 0.55);
   font-size: 14px;
+  text-align: center;
+}
+
+.run-list-empty p {
+  margin: 0;
+}
+
+.run-list-empty-sub {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
+.step-hint {
+  margin: 14px 0 0;
+  color: var(--dim);
+  font-size: 0.8rem;
   text-align: center;
 }
 
