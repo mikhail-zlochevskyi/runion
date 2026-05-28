@@ -138,11 +138,24 @@ button {
 }
 
 .icon-btn {
+  position: relative;
   display: grid;
   width: 38px;
   height: 38px;
   place-items: center;
   border-radius: 50%;
+}
+
+/* Keep the 38px visual circle but extend the tap target to the 44px
+   Apple HIG minimum with an invisible centred hit zone. */
+.icon-btn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .topbar-actions {
@@ -332,11 +345,12 @@ button {
   touch-action: none;
 }
 
+/* Invisible >=44px tall tap zone around the 5px visual handle. */
 .drag-handle::before {
   position: absolute;
-  top: -20px;
+  top: -22px;
   right: -160px;
-  bottom: -12px;
+  bottom: -17px;
   left: -160px;
   content: "";
 }
@@ -393,6 +407,11 @@ button {
   overflow-x: auto;
   padding: 0 18px 12px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Right-edge fade so it's obvious more pills are scrollable off-screen.
+     The fade sits in the right padding, after the last visible pill. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
 }
 
 .filter-strip::-webkit-scrollbar,
@@ -402,12 +421,15 @@ button {
 
 .fpill {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(243, 235, 217, 0.06);
   color: var(--cream);
-  padding: 6px 12px;
-  font-size: 0.74rem;
+  padding: 6px 14px;
+  font-size: 0.78rem;
   touch-action: manipulation;
 }
 
@@ -1263,13 +1285,15 @@ button {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 32px;
-  margin: 6px 0 0;
+  /* 44px tall so the whole band is a valid drag target even though the
+     visible track is only 4px and the thumb 22px. */
+  height: 44px;
+  margin: 2px 0 0;
   background: transparent;
   outline: none;
   padding: 0;
   border: 0;
-  min-height: 32px !important;
+  min-height: 44px !important;
   touch-action: none;
 }
 
