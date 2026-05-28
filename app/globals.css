@@ -1700,17 +1700,8 @@ button {
   margin: 18px auto 0;
 }
 
-.matched-sheet.full {
-  max-height: 72vh;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
-}
-
 .matched-sheet.peek {
   transform: translateY(max(0px, calc(100% - 380px)));
-}
-
-.matched-run-list {
-  padding-bottom: 136px;
 }
 
 .run-list-empty {
