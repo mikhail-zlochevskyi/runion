@@ -3219,12 +3219,69 @@ const CITY_COUNTRY: Record<CitySlug, string> = { sg: "sg", bcn: "es", par: "fr",
 
 type LocationSuggestion = { label: string; lat: number; lng: number };
 
+// Singapore's official geocoder. Keyless search endpoint; resolves postal
+// codes, block numbers, and building names to lat/lng + a clean address.
+async function oneMapSearch(query: string): Promise<LocationSuggestion[]> {
+  const params = new URLSearchParams({
+    searchVal: query,
+    returnGeom: "Y",
+    getAddrDetails: "Y",
+    pageNum: "1",
+  });
+  try {
+    const response = await fetch(
+      `https://www.onemap.gov.sg/api/common/elastic/search?${params.toString()}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) return [];
+    const data = (await response.json()) as {
+      results?: Array<{
+        SEARCHVAL?: string;
+        BLK_NO?: string;
+        ROAD_NAME?: string;
+        BUILDING?: string;
+        ADDRESS?: string;
+        POSTAL?: string;
+        LATITUDE?: string;
+        LONGITUDE?: string;
+      }>;
+    };
+    return (data.results ?? [])
+      .map((row) => {
+        const lat = Number(row.LATITUDE);
+        const lng = Number(row.LONGITUDE);
+        const building = row.BUILDING && row.BUILDING !== "NIL" ? row.BUILDING : "";
+        const street = [row.BLK_NO, row.ROAD_NAME].filter(Boolean).join(" ").trim();
+        const primary = building || street || row.SEARCHVAL || "Singapore";
+        const context = [building ? street : "", row.POSTAL ? `S${row.POSTAL}` : ""]
+          .filter(Boolean)
+          .join(", ");
+        const label = context ? `${primary} — ${context}` : primary;
+        return { label, lat, lng };
+      })
+      .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng))
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 async function forwardGeocode(query: string, city: CitySlug): Promise<LocationSuggestion[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
+
+  // Singapore: OneMap is the authoritative geocoder. It resolves 6-digit
+  // postal codes (079718 -> 8 ENGGOR STREET), block numbers, and building
+  // names far better than Nominatim. Fall back to Nominatim only if it
+  // returns nothing.
+  if (city === "sg") {
+    const oneMap = await oneMapSearch(trimmed);
+    if (oneMap.length) return oneMap;
+  }
+
   const bounds = CITY_BOUNDS[city];
-  // Singapore-specific: bare digits/short alphanumerics typically refer to an HDB block;
-  // prefix "Block" so Nominatim resolves "88" or "123A" to the right building.
+  // Non-OneMap fallback: bare digits/short alphanumerics usually refer to an
+  // HDB block; prefix "Block" so Nominatim resolves "88" or "123A".
   const isSgBlock = city === "sg" && /^\d+[a-zA-Z]?$/.test(trimmed);
   const q = isSgBlock ? `Block ${trimmed} Singapore` : trimmed;
   const params = new URLSearchParams({
