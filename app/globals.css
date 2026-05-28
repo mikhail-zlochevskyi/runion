@@ -1291,6 +1291,38 @@ button {
   text-transform: none;
 }
 
+.field-label-count {
+  color: var(--dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
+.run-note-input {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  background: rgba(243, 235, 217, 0.06);
+  color: var(--cream);
+  padding: 12px 13px;
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.run-note-input::placeholder {
+  color: var(--dim);
+}
+
+.run-card-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--peach);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .slider-range {
   -webkit-appearance: none;
   appearance: none;

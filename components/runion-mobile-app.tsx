@@ -112,7 +112,10 @@ type PostRunDraft = {
   pickedLng: number | null;
   recurring: boolean;
   womenOnly: boolean;
+  note: string;
 };
+
+const RUN_NOTE_MAX = 140;
 
 const CITY_BOUNDS: Record<CitySlug, { south: number; west: number; north: number; east: number }> = {
   bcn: { south: 41.32, west: 2.05, north: 41.47, east: 2.23 },
@@ -1996,6 +1999,7 @@ function PostRunScreen({
     pickedLng: null,
     recurring: false,
     womenOnly: false,
+    note: "",
   }));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2092,6 +2096,7 @@ function PostRunScreen({
       {
         city,
         title: titleFromIntent(draft.intent),
+        description: draft.note.trim() || null,
         locationName: draft.locationName.trim(),
         lat: draft.pickedLat,
         lng: draft.pickedLng,
@@ -2183,6 +2188,21 @@ function PostRunScreen({
               <span>42 km</span>
             </div>
           </div>
+          <label className="field-label">
+            <span className="field-label-row">
+              <span>Note (optional)</span>
+              <span className="field-label-count">{draft.note.length}/{RUN_NOTE_MAX}</span>
+            </span>
+            <textarea
+              className="run-note-input"
+              value={draft.note}
+              maxLength={RUN_NOTE_MAX}
+              rows={2}
+              placeholder="e.g. Easy chatty pace, coffee after. New runners welcome."
+              onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+              onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" })}
+            />
+          </label>
           <label className={`recurrence-toggle${draft.recurring ? " recurrence-toggle--on" : ""}`}>
             <input
               type="checkbox"
@@ -2750,6 +2770,7 @@ function MatchedRunCard({
           </span>
           <b>{run.paceMin}</b>
         </span>
+        {run.description ? <span className="run-card-note">{run.description}</span> : null}
         <span className="run-card-foot">
           <span>{level.toLowerCase()}</span>
           <span className="view-pill">{run.locationName}</span>
