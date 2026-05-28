@@ -425,6 +425,99 @@ button {
   text-transform: none;
 }
 
+.city-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.city-switch svg {
+  color: var(--sun);
+}
+
+.city-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 10, 6, 0.6);
+  backdrop-filter: blur(3px);
+  padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+}
+
+.city-picker {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #2e3026 0%, #1a140d 100%);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  padding: 16px 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
+}
+
+.city-picker-title {
+  margin: 0 0 6px;
+  color: var(--cream);
+  font-family: var(--font-fraunces), serif;
+  font-style: italic;
+  font-size: 1.2rem;
+}
+
+.city-picker-group {
+  margin: 8px 0 2px;
+  color: var(--sun);
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.city-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.05);
+  color: var(--cream);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.city-picker-item--active {
+  border-color: var(--terracotta);
+  color: var(--sun);
+}
+
+.city-picker-item--soon {
+  color: var(--dim);
+  cursor: default;
+  background: transparent;
+}
+
+.city-picker-soon-tag {
+  font-family: var(--font-dm-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
 .filter-strip {
   display: flex;
   flex: 0 0 auto;

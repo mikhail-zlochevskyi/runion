@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { ArrowLeft, CalendarClock, Camera, Check, Footprints, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarClock, Camera, Check, ChevronDown, Footprints, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
@@ -116,7 +116,19 @@ type PostRunDraft = {
 };
 
 const RUN_NOTE_MAX = 140;
+const INTENT_MAX = 3;
 const SEEN_ACTIVITY_KEY = "runion.seenActivity";
+
+// City picker. Live cities are switchable; coming-soon are display-only
+// (slug null = no map config yet). Order: live first, then soon.
+const CITY_PICKER: { slug: CitySlug | null; label: string; live: boolean }[] = [
+  { slug: "bcn", label: "Barcelona", live: true },
+  { slug: "sg", label: "Singapore", live: true },
+  { slug: "ber", label: "Berlin", live: false },
+  { slug: "par", label: "Paris", live: false },
+  { slug: null, label: "Rome", live: false },
+  { slug: null, label: "New York", live: false },
+];
 
 function readSeenActivity(): string[] {
   if (typeof window === "undefined") return [];
@@ -808,6 +820,10 @@ export function RunionMobileApp({ initialCity }: Props) {
         onPostRun={() => router.push(`/post-run#${city}`)}
         onShowRuns={() => router.push(`/runs#${city}`)}
         onProfile={() => router.push(`/profile#${city}`)}
+        onCityChange={(slug) => {
+          setCity(slug);
+          router.push(`/map#${slug}`);
+        }}
         runsBadge={runsBadge}
       />
     );
@@ -933,13 +949,13 @@ function OnboardingStep({
   if (step === 2) {
     return (
       <div className="step-card">
-        <Question title="Why do you want to run with others?" />
+        <Question title="Why do you want to run with others?" detail={`Pick up to ${INTENT_MAX} — keeps your matches sharp.`} />
         <OptionStack
           options={intents.map((item) => ({ value: item.value, label: item.label, detail: item.detail, active: draft.run_intents.includes(item.value) }))}
           onSelect={(value) =>
             setDraft((current) => ({
               ...current,
-              run_intents: toggleValue(current.run_intents, value as RunIntent)
+              run_intents: toggleValueMax(current.run_intents, value as RunIntent, INTENT_MAX)
             }))
           }
         />
@@ -1460,13 +1476,13 @@ function ProfileScreen({
             />
           </ProfileChoiceGroup>
 
-          <ProfileChoiceGroup title="Intent">
+          <ProfileChoiceGroup title={`Intent (up to ${INTENT_MAX})`}>
             <OptionStack
               options={intents.map((item) => ({ value: item.value, label: item.label, detail: item.detail, active: localProfile.run_intents.includes(item.value) }))}
               onSelect={(value) =>
                 setLocalProfile((current) => ({
                   ...current,
-                  run_intents: toggleValue(current.run_intents, value as RunIntent)
+                  run_intents: toggleValueMax(current.run_intents, value as RunIntent, INTENT_MAX)
                 }))
               }
             />
@@ -2395,6 +2411,7 @@ function MatchedRunsMap({
   onPostRun,
   onShowRuns,
   onProfile,
+  onCityChange,
   runsBadge = 0
 }: {
   city: CitySlug;
@@ -2406,9 +2423,11 @@ function MatchedRunsMap({
   onPostRun: () => void;
   onShowRuns: () => void;
   onProfile: () => void;
+  onCityChange: (slug: CitySlug) => void;
   runsBadge?: number;
 }) {
   const cityConf = CITY_CONFIG[city];
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [activeFilter, setActiveFilter] = useState<MapRunFilter>("all");
   const [runsStatus, setRunsStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -2747,7 +2766,18 @@ function MatchedRunsMap({
             <br />
             <span>your pace</span>
           </h1>
-          <p>{CITY_CONFIG[city].label} · runs near you</p>
+          <button
+            type="button"
+            className="city-switch"
+            onClick={(event) => {
+              event.stopPropagation();
+              setCityPickerOpen(true);
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {CITY_CONFIG[city].label} · runs near you
+            <ChevronDown size={14} />
+          </button>
         </header>
 
         <div className="filter-strip" aria-label="Run filters">
@@ -2811,6 +2841,36 @@ function MatchedRunsMap({
           <div className="run-list-empty">No runs nearby yet. Post the first one.</div>
         )}
       </section>
+
+      {cityPickerOpen ? (
+        <div className="city-picker-overlay" onClick={() => setCityPickerOpen(false)}>
+          <div className="city-picker" onClick={(event) => event.stopPropagation()}>
+            <p className="city-picker-title">Choose your city</p>
+            <p className="city-picker-group">Live now</p>
+            {CITY_PICKER.filter((c) => c.live).map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                className={`city-picker-item${c.slug === city ? " city-picker-item--active" : ""}`}
+                onClick={() => {
+                  if (c.slug) onCityChange(c.slug);
+                  setCityPickerOpen(false);
+                }}
+              >
+                {c.label}
+                {c.slug === city ? <Check size={16} /> : null}
+              </button>
+            ))}
+            <p className="city-picker-group">Coming soon</p>
+            {CITY_PICKER.filter((c) => !c.live).map((c) => (
+              <div key={c.label} className="city-picker-item city-picker-item--soon">
+                {c.label}
+                <span className="city-picker-soon-tag">Soon</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -3598,6 +3658,17 @@ function toggleValue<T>(values: T[], value: T) {
     const next = values.filter((item) => item !== value);
     return next.length ? next : values;
   }
+  return [...values, value];
+}
+
+// Like toggleValue but refuses to add past `max` (still always allows
+// removing). Used to cap intents so the matching signal stays focused.
+function toggleValueMax<T>(values: T[], value: T, max: number) {
+  if (values.includes(value)) {
+    const next = values.filter((item) => item !== value);
+    return next.length ? next : values;
+  }
+  if (values.length >= max) return values;
   return [...values, value];
 }
 
