@@ -106,8 +106,10 @@ async function enrichRunsWithHost(supabase: SB, rows: RunRow[]): Promise<RunRow[
   );
   if (!hostIds.length) return rows;
 
+  // host_public_profiles is SECURITY DEFINER so attendees (who can't read
+  // another user's row under RLS) still get the host's public mini-profile.
   const [usersResult, stats] = await Promise.all([
-    supabase.from("users").select("id, name, runner_type, run_intents, socials_url").in("id", hostIds),
+    supabase.rpc("host_public_profiles", { ids: hostIds }),
     fetchUserStatsBatch(supabase, hostIds),
   ]);
 
@@ -115,7 +117,7 @@ async function enrichRunsWithHost(supabase: SB, rows: RunRow[]): Promise<RunRow[
     string,
     { name?: string | null; runner_type?: string | null; run_intents?: string[] | null; socials_url?: string | null }
   >();
-  if (!usersResult.error && usersResult.data) {
+  if (!usersResult.error && Array.isArray(usersResult.data)) {
     for (const row of usersResult.data as Array<{
       id: string;
       name?: string | null;

@@ -2922,7 +2922,7 @@ function MatchedRunCard({
           <span className="view-pill">{run.locationName}</span>
         </span>
       </button>
-      {active ? <HostMiniProfile run={run} /> : null}
+      {active && !isHost ? <HostMiniProfile run={run} /> : null}
       <button
         className="detail-cta request-spot-btn"
         onClick={onRequest}
