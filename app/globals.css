@@ -1703,6 +1703,11 @@ button {
   font-weight: 600;
 }
 
+.text-btn--danger {
+  color: var(--rose);
+  font-weight: 600;
+}
+
 .hosted-card--past {
   opacity: 0.78;
 }

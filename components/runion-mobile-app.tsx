@@ -1155,7 +1155,17 @@ function RunsFeed({
 
             <ActivitySection title="Pending requests" empty="No pending requests.">
               {activity.pending.map((item) => (
-                <ActivityRunCard key={item.id} item={item} badge="Requested" note="Waiting for host approval" />
+                <ActivityRunCard
+                  key={item.id}
+                  item={item}
+                  badge="Requested"
+                  note="Waiting for host approval"
+                  onWithdraw={() => {
+                    if (window.confirm(`Withdraw your request to join ${item.run.title}?`)) {
+                      updateRequestStatus(item, "requested");
+                    }
+                  }}
+                />
               ))}
             </ActivitySection>
 
@@ -1589,7 +1599,8 @@ function ActivityRunCard({
   note,
   hostStats,
   viewerName,
-  showApprovedContact = false
+  showApprovedContact = false,
+  onWithdraw
 }: {
   item: RunParticipantActivity;
   badge: string;
@@ -1597,11 +1608,17 @@ function ActivityRunCard({
   hostStats?: UserStats;
   viewerName?: string;
   showApprovedContact?: boolean;
+  onWithdraw?: () => void;
 }) {
   return (
     <article className="activity-card">
       <div className="activity-card-head">
         <span className="status-badge">{badge}</span>
+        {onWithdraw ? (
+          <button className="text-btn text-btn--danger" onClick={onWithdraw}>
+            Withdraw
+          </button>
+        ) : null}
       </div>
       <h3>{item.run.title}</h3>
       <RunFactGrid run={item.run} />
