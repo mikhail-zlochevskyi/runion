@@ -338,7 +338,10 @@ button {
 }
 
 .sheet.peek {
-  transform: translateY(calc(100% - 380px));
+  /* Reveal up to 380px, but never lift the sheet above the bottom edge:
+     with sparse content (e.g. an empty state) calc(100% - 380px) would go
+     negative and expose a strip of map below the sheet. Clamp at 0. */
+  transform: translateY(max(0px, calc(100% - 380px)));
 }
 
 .sheet.full {
@@ -979,7 +982,7 @@ button {
   }
 
   .sheet.peek {
-    transform: translateX(-50%) translateY(calc(100% - 380px));
+    transform: translateX(-50%) translateY(max(0px, calc(100% - 380px)));
   }
 
   .sheet.full {
@@ -1690,7 +1693,7 @@ button {
 }
 
 .matched-sheet.peek {
-  transform: translateY(calc(100% - 380px));
+  transform: translateY(max(0px, calc(100% - 380px)));
 }
 
 .matched-run-list {
@@ -3059,7 +3062,7 @@ button {
 
 @media (min-width: 768px) {
   .matched-sheet.peek {
-    transform: translateX(-50%) translateY(calc(100% - 270px));
+    transform: translateX(-50%) translateY(max(0px, calc(100% - 270px)));
   }
 
   .runs-panel,
