@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { ArrowLeft, CalendarClock, Camera, Check, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarClock, Camera, Check, Footprints, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
@@ -2882,7 +2882,7 @@ function BrandBar({
         ) : null}
         {page !== "runs" && onRuns ? (
           <button className="icon-btn" aria-label="My runs" onClick={onRuns} type="button">
-            <Check size={17} />
+            <Footprints size={17} />
           </button>
         ) : null}
         {page !== "profile" && onProfile ? (
