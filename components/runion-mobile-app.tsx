@@ -2760,7 +2760,6 @@ function MatchedRunsMap({
           onPointerUp={endSheetDrag}
           onPointerCancel={endSheetDrag}
         >
-          <p className="sheet-eyebrow">Matched, not random</p>
           <h1>
             {filteredRuns.length} runs near
             <br />
@@ -2769,13 +2768,15 @@ function MatchedRunsMap({
           <button
             type="button"
             className="city-switch"
+            aria-label={`Change city — currently ${CITY_CONFIG[city].label}`}
             onClick={(event) => {
               event.stopPropagation();
               setCityPickerOpen(true);
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {CITY_CONFIG[city].label} · runs near you
+            <MapPin size={13} />
+            <span className="city-switch-city">{CITY_CONFIG[city].label}</span>
             <ChevronDown size={14} />
           </button>
         </header>
