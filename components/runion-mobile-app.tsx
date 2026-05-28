@@ -1615,7 +1615,7 @@ function ActivityRunCard({
       <div className="activity-card-head">
         <span className="status-badge">{badge}</span>
         {onWithdraw ? (
-          <button className="text-btn text-btn--danger" onClick={onWithdraw}>
+          <button className="text-btn" onClick={onWithdraw}>
             Withdraw
           </button>
         ) : null}
