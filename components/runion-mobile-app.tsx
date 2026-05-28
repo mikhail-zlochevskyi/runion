@@ -67,6 +67,11 @@ type CoreRun = {
   currentSpots: number;
   status: string;
   organiserId?: string;
+  organiserName?: string;
+  organiserSocials?: string;
+  organiserRunnerType?: string;
+  organiserRunIntents?: string[];
+  organiserCompletedRuns?: number;
   recurrence?: "weekly" | null;
   womenOnly?: boolean;
   source: "db" | "mock" | "local";
@@ -2750,6 +2755,7 @@ function MatchedRunCard({
           <span className="view-pill">{run.locationName}</span>
         </span>
       </button>
+      {active ? <HostMiniProfile run={run} /> : null}
       <button
         className="detail-cta request-spot-btn"
         onClick={onRequest}
@@ -2759,6 +2765,45 @@ function MatchedRunCard({
       </button>
       {requested ? <div className="success-state">Spot requested. We&apos;ll confirm your match soon.</div> : null}
     </article>
+  );
+}
+
+const runnerTypeLabels: Record<string, string> = Object.fromEntries(
+  runnerTypes.map((r) => [r.value, r.label])
+);
+const profileIntentLabels: Record<string, string> = Object.fromEntries(
+  intents.map((i) => [i.value, i.label])
+);
+
+function HostMiniProfile({ run }: { run: RunRow }) {
+  const name = run.organiserName?.trim();
+  const runnerType = run.organiserRunnerType ? runnerTypeLabels[run.organiserRunnerType] : null;
+  const intentLabelList = (run.organiserRunIntents ?? [])
+    .map((value) => profileIntentLabels[value])
+    .filter(Boolean);
+  const completed = run.organiserCompletedRuns ?? 0;
+  const runsLabel = completed === 1 ? "1 run together so far" : `${completed} runs together so far`;
+  const hasSocials = Boolean(run.organiserSocials);
+
+  if (!name && !runnerType && !intentLabelList.length && !hasSocials && !completed) return null;
+
+  return (
+    <div className="host-mini">
+      <div className="host-mini-head">
+        <span className="host-mini-name">{name ? `Hosted by ${name}` : "Host"}</span>
+        <span className="host-mini-runs">{runsLabel}</span>
+      </div>
+      {runnerType || intentLabelList.length ? (
+        <div className="host-mini-tags">
+          {runnerType ? <span className="host-mini-tag">{runnerType}</span> : null}
+          {intentLabelList.map((label) => (
+            <span key={label} className="host-mini-tag host-mini-tag--soft">{label}</span>
+          ))}
+        </div>
+      ) : null}
+      {/* Socials only — WhatsApp stays private until the host approves. */}
+      {hasSocials ? <RequesterSocials socials={run.organiserSocials ?? undefined} /> : null}
+    </div>
   );
 }
 
@@ -3017,6 +3062,11 @@ function runRowToCoreRun(run: RunRow): CoreRun {
     currentSpots: run.currentSpots,
     status: run.status,
     organiserId: run.organiserId ?? undefined,
+    organiserName: run.organiserName ?? undefined,
+    organiserSocials: run.organiserSocials ?? undefined,
+    organiserRunnerType: run.organiserRunnerType ?? undefined,
+    organiserRunIntents: run.organiserRunIntents ?? undefined,
+    organiserCompletedRuns: run.organiserCompletedRuns ?? undefined,
     recurrence: run.recurrence ?? null,
     womenOnly: run.womenOnly ?? false,
     source: "db",

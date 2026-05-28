@@ -20,6 +20,10 @@ export type RunRow = {
   organiserId: string | null;
   organiserName?: string | null;
   organiserWhatsapp?: string | null;
+  organiserSocials?: string | null;
+  organiserRunnerType?: string | null;
+  organiserRunIntents?: string[] | null;
+  organiserCompletedRuns?: number | null;
   maxGroupSize: number;
   currentSpots: number;
   status: string;
@@ -68,9 +72,10 @@ export async function fetchOpenRuns(
       requested_city: city,
     });
     if (!rpc.error && Array.isArray(rpc.data)) {
-      return rpc.data
+      const rows = rpc.data
         .map((row) => toRunRow(row as Record<string, unknown>, city))
         .filter((row): row is RunRow => Boolean(row));
+      return enrichRunsWithHost(supabase, rows);
     }
   }
 
@@ -85,9 +90,55 @@ export async function fetchOpenRuns(
     .order("run_date", { ascending: true });
 
   if (error || !data) return [];
-  return data
+  const rows = data
     .map((row) => toRunRow(row as Record<string, unknown>, city))
     .filter((row): row is RunRow => Boolean(row));
+  return enrichRunsWithHost(supabase, rows);
+}
+
+// Attaches a lightweight host mini-profile to each run so the card can show
+// who's hosting before a request: name, runner type, intents, socials, and
+// completed-run count. WhatsApp is deliberately excluded — it stays private
+// until the host approves the request.
+async function enrichRunsWithHost(supabase: SB, rows: RunRow[]): Promise<RunRow[]> {
+  const hostIds = Array.from(
+    new Set(rows.map((r) => r.organiserId).filter((id): id is string => Boolean(id)))
+  );
+  if (!hostIds.length) return rows;
+
+  const [usersResult, stats] = await Promise.all([
+    supabase.from("users").select("id, name, runner_type, run_intents, socials_url").in("id", hostIds),
+    fetchUserStatsBatch(supabase, hostIds),
+  ]);
+
+  const hostMap = new Map<
+    string,
+    { name?: string | null; runner_type?: string | null; run_intents?: string[] | null; socials_url?: string | null }
+  >();
+  if (!usersResult.error && usersResult.data) {
+    for (const row of usersResult.data as Array<{
+      id: string;
+      name?: string | null;
+      runner_type?: string | null;
+      run_intents?: string[] | null;
+      socials_url?: string | null;
+    }>) {
+      hostMap.set(row.id, row);
+    }
+  }
+
+  return rows.map((run) => {
+    if (!run.organiserId) return run;
+    const host = hostMap.get(run.organiserId);
+    return {
+      ...run,
+      organiserName: host?.name ?? run.organiserName ?? null,
+      organiserRunnerType: host?.runner_type ?? null,
+      organiserRunIntents: host?.run_intents ?? null,
+      organiserSocials: host?.socials_url ?? null,
+      organiserCompletedRuns: stats[run.organiserId]?.completedRuns ?? 0,
+    };
+  });
 }
 
 export async function createRun(

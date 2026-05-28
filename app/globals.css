@@ -1826,6 +1826,57 @@ button {
   color: var(--muted);
 }
 
+.host-mini {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(243, 235, 217, 0.04);
+}
+
+.host-mini-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.host-mini-name {
+  color: var(--cream);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.host-mini-runs {
+  color: var(--sun);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.host-mini-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.host-mini-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 164, 92, 0.35);
+  background: rgba(244, 164, 92, 0.1);
+  color: var(--sun);
+  font-size: 0.7rem;
+}
+
+.host-mini-tag--soft {
+  border-color: var(--line);
+  background: rgba(243, 235, 217, 0.06);
+  color: var(--muted);
+}
+
 .recap-toggle input {
   accent-color: var(--terracotta);
 }
