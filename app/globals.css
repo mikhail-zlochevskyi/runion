@@ -324,12 +324,9 @@ button {
 
 .sheet.full {
   transform: translateY(0);
-  /* Pin the sheet to its full size so the run-list (flex: 1) actually
-     fills the remaining height; otherwise the sheet sized to its content
-     and left a dead gap below the last card. dvh keeps the bottom clear
-     of the mobile browser toolbar. */
-  height: 88vh;
-  height: 88dvh;
+  /* Size to content, capped at 88dvh (max-height on .sheet). With few runs
+     the sheet shrinks so there's no empty gradient gap below the last card;
+     with many it hits the cap and the run-list scrolls. */
 }
 
 .sheet.hidden {
@@ -457,7 +454,11 @@ button {
 }
 
 .run-list {
-  flex: 1;
+  /* Size to content but allow shrink+scroll when the sheet hits its cap.
+     Not flex:1 — that would force the list to fill 88dvh even with one
+     card, leaving an empty gradient gap. min-height:0 lets it scroll. */
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
   /* Bottom padding used to be 96px to clear the old floating tab bar;
      that's gone now. Keep a small breathing room above the safe-area. */
