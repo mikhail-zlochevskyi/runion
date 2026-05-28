@@ -59,7 +59,13 @@ button {
 
 .app-shell {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Anchor to the dynamic viewport so the sheet's bottom: 0 sits above the
+     mobile browser's bottom toolbar instead of behind it. vh fallback first. */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -299,6 +305,7 @@ button {
   z-index: 20;
   display: flex;
   max-height: 88vh;
+  max-height: 88dvh;
   flex-direction: column;
   border-top: 1px solid var(--line);
   border-radius: 20px 20px 0 0;
@@ -319,8 +326,10 @@ button {
   transform: translateY(0);
   /* Pin the sheet to its full size so the run-list (flex: 1) actually
      fills the remaining height; otherwise the sheet sized to its content
-     and left a dead gap below the last card. */
+     and left a dead gap below the last card. dvh keeps the bottom clear
+     of the mobile browser toolbar. */
   height: 88vh;
+  height: 88dvh;
 }
 
 .sheet.hidden {
