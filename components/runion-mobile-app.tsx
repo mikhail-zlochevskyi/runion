@@ -2151,14 +2151,14 @@ function PostRunScreen({
               type="range"
               className="slider-range"
               min={1}
-              max={100}
+              max={42}
               step={1}
               value={draft.distanceKm}
               onChange={(event) => setDraft((current) => ({ ...current, distanceKm: Number(event.target.value) }))}
             />
             <div className="slider-labels">
               <span>1 km</span>
-              <span>100 km</span>
+              <span>42 km</span>
             </div>
           </div>
           <label className={`recurrence-toggle${draft.recurring ? " recurrence-toggle--on" : ""}`}>
