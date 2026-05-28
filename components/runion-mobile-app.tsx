@@ -2782,7 +2782,7 @@ function HostMiniProfile({ run }: { run: RunRow }) {
     .map((value) => profileIntentLabels[value])
     .filter(Boolean);
   const completed = run.organiserCompletedRuns ?? 0;
-  const runsLabel = completed === 1 ? "1 run together so far" : `${completed} runs together so far`;
+  const runsLabel = completed === 1 ? "1 matched run" : `${completed} matched runs`;
   const hasSocials = Boolean(run.organiserSocials);
 
   if (!name && !runnerType && !intentLabelList.length && !hasSocials && !completed) return null;
