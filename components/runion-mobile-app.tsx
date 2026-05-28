@@ -116,6 +116,27 @@ type PostRunDraft = {
 };
 
 const RUN_NOTE_MAX = 140;
+const SEEN_ACTIVITY_KEY = "runion.seenActivity";
+
+function readSeenActivity(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SEEN_ACTIVITY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeenActivity(ids: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SEEN_ACTIVITY_KEY, JSON.stringify(ids));
+  } catch {
+    // Ignore quota / privacy-mode errors — the badge just won't persist.
+  }
+}
 
 const CITY_BOUNDS: Record<CitySlug, { south: number; west: number; north: number; east: number }> = {
   bcn: { south: 41.32, west: 2.05, north: 41.47, east: 2.23 },
@@ -267,6 +288,7 @@ export function RunionMobileApp({ initialCity }: Props) {
   const [requestedRunId, setRequestedRunId] = useState("");
   const [profileId, setProfileId] = useState<string | undefined>();
   const [profileEmail, setProfileEmail] = useState<string | undefined>();
+  const [runsBadge, setRunsBadge] = useState(0);
 
   useEffect(() => {
     function syncCityFromHash() {
@@ -334,6 +356,39 @@ export function RunionMobileApp({ initialCity }: Props) {
       router.replace("/auth/login");
     }
   }, [appState, pathname, router]);
+
+  // Badge on the "My runs" nav icon. Counts actionable activity the user
+  // hasn't acknowledged yet: incoming requests on runs they host, and their
+  // own requests that a host has approved. Visiting /runs clears it.
+  useEffect(() => {
+    if (!supabase || !profileId || profileId === "preview-user") {
+      setRunsBadge(0);
+      return;
+    }
+    let cancelled = false;
+    async function refreshBadge() {
+      const raw = await apiFetchMyActivity(supabase!, { profileId: profileId! });
+      if (cancelled) return;
+      const ids = [
+        ...raw.confirmed.map((c) => `confirmed:${c.participant.id}`),
+        ...raw.hosted.flatMap((h) => h.pending.map((p) => `incoming:${p.id}`)),
+      ];
+      const seen = readSeenActivity();
+      if (pathname === "/runs") {
+        // On the runs screen everything is acknowledged.
+        writeSeenActivity(ids);
+        setRunsBadge(0);
+      } else {
+        setRunsBadge(ids.filter((id) => !seen.includes(id)).length);
+      }
+    }
+    refreshBadge();
+    const interval = window.setInterval(refreshBadge, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [supabase, profileId, pathname]);
 
   async function loadProfile(userId: string, userEmail?: string, authProfile?: { name?: string; photoUrl?: string }) {
     if (!supabase) return;
@@ -717,6 +772,7 @@ export function RunionMobileApp({ initialCity }: Props) {
           router.push(`/runs#${city}`);
         }}
         onProfile={() => router.push(`/profile#${city}`)}
+        runsBadge={runsBadge}
       />
     );
   }
@@ -735,6 +791,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         onRuns={() => router.push(`/runs#${city}`)}
         onSave={saveProfileChanges}
         onSignOut={signOut}
+        runsBadge={runsBadge}
       />
     );
   }
@@ -751,6 +808,7 @@ export function RunionMobileApp({ initialCity }: Props) {
         onPostRun={() => router.push(`/post-run#${city}`)}
         onShowRuns={() => router.push(`/runs#${city}`)}
         onProfile={() => router.push(`/profile#${city}`)}
+        runsBadge={runsBadge}
       />
     );
   }
@@ -1254,7 +1312,8 @@ function ProfileScreen({
   onPostRun,
   onRuns,
   onSave,
-  onSignOut
+  onSignOut,
+  runsBadge = 0
 }: {
   profile: OnboardingDraft;
   email?: string;
@@ -1267,6 +1326,7 @@ function ProfileScreen({
   onRuns: () => void;
   onSave: (profile: OnboardingDraft) => Promise<{ ok: boolean; message: string }>;
   onSignOut: () => Promise<void>;
+  runsBadge?: number;
 }) {
   const [localProfile, setLocalProfile] = useState<OnboardingDraft>(() => ({
     ...normalizeProfileDraft(profile)
@@ -1313,6 +1373,7 @@ function ProfileScreen({
         onMap={onMap}
         onPostRun={onPostRun}
         onRuns={onRuns}
+        runsBadge={runsBadge}
       />
       <section className="profile-panel" aria-label="Profile">
         <button className="round-btn" onClick={onBack} aria-label="Back to runs">
@@ -1978,7 +2039,8 @@ function PostRunScreen({
   onMap,
   onRuns,
   onPosted,
-  onProfile
+  onProfile,
+  runsBadge = 0
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
@@ -1989,6 +2051,7 @@ function PostRunScreen({
   onRuns: () => void;
   onPosted: () => void;
   onProfile: () => void;
+  runsBadge?: number;
 }) {
   const [draft, setDraft] = useState<PostRunDraft>(() => ({
     startTime: defaultStartTime(),
@@ -2128,6 +2191,7 @@ function PostRunScreen({
         onMap={onMap}
         onRuns={onRuns}
         onProfile={onProfile}
+        runsBadge={runsBadge}
       />
       <section className="post-run-panel" aria-label="Post a run">
         <button className="round-btn" onClick={onBack} aria-label="Back to runs">
@@ -2330,7 +2394,8 @@ function MatchedRunsMap({
   onRequest,
   onPostRun,
   onShowRuns,
-  onProfile
+  onProfile,
+  runsBadge = 0
 }: {
   city: CitySlug;
   profile: OnboardingDraft;
@@ -2341,6 +2406,7 @@ function MatchedRunsMap({
   onPostRun: () => void;
   onShowRuns: () => void;
   onProfile: () => void;
+  runsBadge?: number;
 }) {
   const cityConf = CITY_CONFIG[city];
   const [runs, setRuns] = useState<RunRow[]>([]);
@@ -2644,6 +2710,7 @@ function MatchedRunsMap({
         onPostRun={onPostRun}
         onRuns={onShowRuns}
         onProfile={onProfile}
+        runsBadge={runsBadge}
       />
 
       {locationStatus !== "idle" ? <div className={`location-toast ${locationStatus}`}>{locationStatusLabel(locationStatus)}</div> : null}
@@ -2910,6 +2977,7 @@ function BrandBar({
   onLocate,
   onLogo,
   locationStatus,
+  runsBadge = 0,
 }: {
   page?: "map" | "runs" | "post" | "profile" | "other";
   onMap?: () => void;
@@ -2919,6 +2987,7 @@ function BrandBar({
   onLocate?: () => void;
   onLogo?: () => void;
   locationStatus?: LocationStatus;
+  runsBadge?: number;
 }) {
   const logoHandler = onLogo ?? onMap;
   const LogoContent = (
@@ -2966,8 +3035,16 @@ function BrandBar({
           </button>
         ) : null}
         {page !== "runs" && onRuns ? (
-          <button className="icon-btn" aria-label="My runs" onClick={onRuns} type="button">
+          <button
+            className="icon-btn"
+            aria-label={runsBadge > 0 ? `My runs, ${runsBadge} new` : "My runs"}
+            onClick={onRuns}
+            type="button"
+          >
             <Footprints size={17} />
+            {runsBadge > 0 ? (
+              <span className="icon-badge" aria-hidden="true">{runsBadge > 9 ? "9+" : runsBadge}</span>
+            ) : null}
           </button>
         ) : null}
         {page !== "profile" && onProfile ? (

@@ -164,6 +164,25 @@ button {
   transform: translate(-50%, -50%);
 }
 
+.icon-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  z-index: 1;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1.5px solid var(--espresso-deep);
+  background: var(--terracotta);
+  color: var(--cream);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .topbar-actions {
   display: flex;
   flex-wrap: wrap;
