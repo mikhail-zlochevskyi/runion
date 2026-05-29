@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 
 import { ArrowLeft, CalendarClock, Camera, Check, ChevronDown, Footprints, LocateFixed, Lock, LogOut, Mail, MapPin, MessageCircle, Plus, Save, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction } from "react";
 import type { CitySlug, PreferredGroupSize, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
 import { authSiteUrl } from "@/lib/auth-site-url";
@@ -2450,8 +2450,21 @@ function MatchedRunsMap({
     markers: import("leaflet").Marker[];
   } | null>(null);
   const filteredRuns = useMemo(() => {
-    const ctx = { userLocation: locationStatus === "found" ? userLocation : null };
-    return runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile, ctx));
+    const loc = locationStatus === "found" ? userLocation : null;
+    const ctx = { userLocation: loc };
+    let list = runs.filter((run) => runMatchesMapFilter(run, activeFilter, profile, ctx));
+    // When we know where the user is, attach straight-line distance and sort
+    // nearest-first. Distance is a sort, never a hard cut — so the closest run
+    // always surfaces even if nothing sits within 2 km.
+    if (loc) {
+      list = list
+        .map((run) => ({
+          ...run,
+          proximityKm: haversineMeters(loc[0], loc[1], run.lat, run.lng) / 1000,
+        }))
+        .sort((a, b) => (a.proximityKm ?? Infinity) - (b.proximityKm ?? Infinity));
+    }
+    return list;
   }, [activeFilter, runs, profile, locationStatus, userLocation]);
 
   useEffect(() => {
@@ -2822,17 +2835,30 @@ function MatchedRunsMap({
           <div className="run-list-empty">Couldn&apos;t load runs. Try again.</div>
         ) : filteredRuns.length ? (
           <div className="run-list matched-run-list" ref={runListRef}>
-            {filteredRuns.map((run) => (
-              <MatchedRunCard
-                key={run.id}
-                run={run}
-                active={run.id === activeRunId}
-                requested={run.id === requestedRunId}
-                isHost={!!profileId && run.organiserId === profileId}
-                onSelect={() => selectRun(run)}
-                onRequest={() => requestSpot(run)}
-              />
-            ))}
+            {filteredRuns.map((run, index) => {
+              // Soft "Further out" divider: the first run beyond 2 km, only
+              // when we have the user's location to measure against.
+              const showDivider =
+                typeof run.proximityKm === "number" &&
+                run.proximityKm * 1000 > NEAR_ME_RADIUS_M &&
+                (index === 0 ||
+                  (filteredRuns[index - 1].proximityKm ?? 0) * 1000 <= NEAR_ME_RADIUS_M);
+              return (
+                <Fragment key={run.id}>
+                  {showDivider ? (
+                    <div className="run-list-divider" role="separator">Further out</div>
+                  ) : null}
+                  <MatchedRunCard
+                    run={run}
+                    active={run.id === activeRunId}
+                    requested={run.id === requestedRunId}
+                    isHost={!!profileId && run.organiserId === profileId}
+                    onSelect={() => selectRun(run)}
+                    onRequest={() => requestSpot(run)}
+                  />
+                </Fragment>
+              );
+            })}
           </div>
         ) : runs.length ? (
           activeFilter === "my_pace" ? (
@@ -2848,7 +2874,7 @@ function MatchedRunsMap({
             </div>
           ) : activeFilter === "near_me" ? (
             <div className="run-list-empty">
-              <p>No runs within 2 km of you.</p>
+              <p>No open runs in {CITY_CONFIG[city].label} yet.</p>
               <button className="text-btn" onClick={() => setActiveFilter("all")}>See all runs</button>
             </div>
           ) : (
@@ -2919,6 +2945,9 @@ function MatchedRunCard({
             {level}
             {run.recurrence === "weekly" ? <span className="weekly-pill">WEEKLY</span> : null}
             {run.womenOnly ? <span className="women-only-pill">WOMEN ONLY</span> : null}
+            {typeof run.proximityKm === "number" ? (
+              <span className="distance-pill">{proximityLabel(run.proximityKm)}</span>
+            ) : null}
           </span>
           <strong>
             {runDayLabel(run.startTime)} {runTimeLabel(run.startTime)}
@@ -2998,11 +3027,9 @@ function runMatchesMapFilter(
   context: { userLocation: [number, number] | null }
 ) {
   if (filter === "all") return true;
-  if (filter === "near_me") {
-    if (!context.userLocation) return false;
-    const distance = haversineMeters(context.userLocation[0], context.userLocation[1], run.lat, run.lng);
-    return distance <= NEAR_ME_RADIUS_M;
-  }
+  // "Near me" is a proximity *sort* (applied in filteredRuns), not a hard
+  // radius cut — so the closest runs surface even when none are within 2 km.
+  if (filter === "near_me") return true;
   if (filter === "my_pace") {
     const center = profile.comfortable_pace_seconds_per_km ?? 315;
     const min = profile.comfortable_pace_min_seconds_per_km ?? center - 15;
@@ -3031,6 +3058,12 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Human-friendly "X away" label for a run's straight-line distance in km.
+function proximityLabel(km: number) {
+  if (km < 1) return `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m away`;
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km away`;
 }
 
 function locationStatusLabel(status: LocationStatus) {

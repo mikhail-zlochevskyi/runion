@@ -29,6 +29,10 @@ export type RunRow = {
   status: string;
   recurrence?: "weekly" | null;
   womenOnly?: boolean;
+  // Straight-line distance from the user's location to the run's start point,
+  // in km. Null when we don't have the user's location. Used to sort and to
+  // show the "X.X km away" chip — never to hard-filter runs out.
+  proximityKm?: number | null;
 };
 
 export type CreateRunInput = {
@@ -56,29 +60,30 @@ async function sweepStaleRuns(supabase: SB) {
   await supabase.rpc("expire_stale_runs").then(() => undefined, () => undefined);
 }
 
+// Haversine distance between two lat/lng points, in km.
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const lat1 = (aLat * Math.PI) / 180;
+  const lat2 = (bLat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 export async function fetchOpenRuns(
   supabase: SB | null,
   opts: { city: CitySlug; lat?: number; lng?: number; radiusM?: number }
 ): Promise<RunRow[]> {
   if (!supabase) return [];
   await sweepStaleRuns(supabase);
-  const { city, lat, lng, radiusM = 2000 } = opts;
+  const { city, lat, lng } = opts;
 
-  if (typeof lat === "number" && typeof lng === "number") {
-    const rpc = await supabase.rpc("runs_nearby", {
-      user_lat: lat,
-      user_lng: lng,
-      radius_m: radiusM,
-      requested_city: city,
-    });
-    if (!rpc.error && Array.isArray(rpc.data)) {
-      const rows = rpc.data
-        .map((row) => toRunRow(row as Record<string, unknown>, city))
-        .filter((row): row is RunRow => Boolean(row));
-      return enrichRunsWithHost(supabase, rows);
-    }
-  }
-
+  // Always fetch every open run in the city. Distance is used as a *sort*, not
+  // a hard radius cut — so "Near me" surfaces the closest runs even when none
+  // sit within 2 km. Proximity is computed client-side via haversine below.
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from("runs")
@@ -90,9 +95,16 @@ export async function fetchOpenRuns(
     .order("run_date", { ascending: true });
 
   if (error || !data) return [];
-  const rows = data
+  let rows = data
     .map((row) => toRunRow(row as Record<string, unknown>, city))
     .filter((row): row is RunRow => Boolean(row));
+
+  if (typeof lat === "number" && typeof lng === "number") {
+    rows = rows
+      .map((run) => ({ ...run, proximityKm: haversineKm(lat, lng, run.lat, run.lng) }))
+      .sort((a, b) => (a.proximityKm ?? Infinity) - (b.proximityKm ?? Infinity));
+  }
+
   return enrichRunsWithHost(supabase, rows);
 }
 
