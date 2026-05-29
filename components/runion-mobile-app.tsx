@@ -2580,13 +2580,19 @@ function MatchedRunsMap({
   function selectRun(run: RunRow) {
     setActiveRunId(run.id);
     leafletRef.current?.map.flyTo([run.lat, run.lng], 14, { duration: 0.6 });
-    // Make sure the sheet is open and scroll the selected run's card into
-    // view so tapping a map marker actually surfaces its details.
-    setSheetState((current) => (current === "hidden" ? "peek" : current));
+    // Open the sheet to PEEK (half) so the map stays visible — never full —
+    // then scroll only the run-list so the selected card sits at the top.
+    // Manual scrollTop (not scrollIntoView) avoids bubbling up and resizing
+    // the sheet to full.
+    setSheetState("peek");
     setDragY(null);
     requestAnimationFrame(() => {
-      const card = runListRef.current?.querySelector<HTMLElement>(`[data-run-id="${run.id}"]`);
-      card?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      const list = runListRef.current;
+      const card = list?.querySelector<HTMLElement>(`[data-run-id="${run.id}"]`);
+      if (list && card) {
+        const delta = card.getBoundingClientRect().top - list.getBoundingClientRect().top;
+        list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
+      }
     });
   }
 
