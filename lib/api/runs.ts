@@ -587,6 +587,25 @@ export function detectSocialsPlatform(url: string): SocialsPlatform | null {
   return null;
 }
 
+// Turns a bare social handle into a full URL. If the input already points at
+// a known platform (strava/instagram/garmin) it's returned untouched; a plain
+// handle like "mikhail.zlochevskyi" or "@mikhail.zlochevskyi" is assumed to be
+// Instagram and expanded to a profile URL. Anything else is returned as-is so
+// validation can still reject it.
+export function normalizeSocialsInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (detectSocialsPlatform(trimmed)) return trimmed;
+  // Not a URL and not a known domain — treat a clean handle as Instagram.
+  if (!/[\s/]/.test(trimmed) && !/^https?:/i.test(trimmed)) {
+    const handle = trimmed.replace(/^@/, "");
+    if (/^[a-zA-Z0-9._]{1,30}$/.test(handle)) {
+      return `https://instagram.com/${handle}`;
+    }
+  }
+  return trimmed;
+}
+
 export function isValidSocialsUrl(url: string): boolean {
   const trimmed = url.trim();
   if (!trimmed) return false;

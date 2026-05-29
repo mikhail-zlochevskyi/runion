@@ -18,6 +18,7 @@ import {
   fetchOpenRuns,
   fetchUserStatsBatch as apiFetchUserStatsBatch,
   isValidSocialsUrl,
+  normalizeSocialsInput,
   openSpots as runOpenSpots,
   paceLabel as runPaceLabel,
   requestSpot as apiRequestSpot,
@@ -443,12 +444,12 @@ export function RunionMobileApp({ initialCity }: Props) {
 
   async function saveProfileChanges(profile: OnboardingDraft) {
     const cleanedWhatsapp = normalizeWhatsapp(profile.whatsapp);
-    const cleanedSocials = profile.socials_url?.trim() ?? "";
+    const cleanedSocials = normalizeSocialsInput(profile.socials_url ?? "");
     if (!cleanedSocials) {
-      return { ok: false, message: "Add a Strava, Instagram, or Garmin link so other runners know who they're meeting." };
+      return { ok: false, message: "Add a Strava, Instagram, or Garmin link (or just your Instagram handle)." };
     }
     if (!isValidSocialsUrl(cleanedSocials)) {
-      return { ok: false, message: "Social link must be a Strava, Instagram, or Garmin URL." };
+      return { ok: false, message: "Use a Strava, Instagram, or Garmin link, or just your Instagram handle." };
     }
     const paceRange = normalizePaceRange(profile);
     const nextProfile: RunnerProfile = {
@@ -615,13 +616,13 @@ export function RunionMobileApp({ initialCity }: Props) {
 
   async function completeOnboarding() {
     const cleanedWhatsapp = normalizeWhatsapp(draft.whatsapp);
-    const cleanedSocials = draft.socials_url?.trim() ?? "";
+    const cleanedSocials = normalizeSocialsInput(draft.socials_url ?? "");
     if (!cleanedSocials) {
-      setAuthNotice("Add a Strava, Instagram, or Garmin link so other runners know who they're meeting.");
+      setAuthNotice("Add a Strava, Instagram, or Garmin link (or just your Instagram handle).");
       return;
     }
     if (!isValidSocialsUrl(cleanedSocials)) {
-      setAuthNotice("Social link must be a Strava, Instagram, or Garmin URL.");
+      setAuthNotice("Use a Strava, Instagram, or Garmin link, or just your Instagram handle.");
       return;
     }
     const profile: RunnerProfile = {
@@ -1038,7 +1039,7 @@ function OnboardingStep({
             autoCorrect="off"
             autoComplete="url"
             spellCheck={false}
-            placeholder="Paste a Strava, Instagram, or Garmin link"
+            placeholder="Strava/Garmin link, or your Instagram @handle"
           />
         </span>
         <span className="privacy-note">Helps people understand who they&apos;re running with. Hosts see this when you request a spot.</span>
@@ -1461,7 +1462,7 @@ function ProfileScreen({
                 autoCorrect="off"
                 autoComplete="url"
                 spellCheck={false}
-                placeholder="Paste a Strava, Instagram, or Garmin link"
+                placeholder="Strava/Garmin link, or your Instagram @handle"
               />
             </span>
             <span className="privacy-note">Helps people understand who they&apos;re running with. Hosts see this when you request a spot.</span>
