@@ -2442,6 +2442,7 @@ function MatchedRunsMap({
   const [refreshKey, setRefreshKey] = useState(0);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLElement | null>(null);
+  const runListRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef({ active: false, moved: false, startY: 0, startSheetY: 0, currentY: 0 });
   const leafletRef = useRef<{
     map: import("leaflet").Map;
@@ -2579,6 +2580,14 @@ function MatchedRunsMap({
   function selectRun(run: RunRow) {
     setActiveRunId(run.id);
     leafletRef.current?.map.flyTo([run.lat, run.lng], 14, { duration: 0.6 });
+    // Make sure the sheet is open and scroll the selected run's card into
+    // view so tapping a map marker actually surfaces its details.
+    setSheetState((current) => (current === "hidden" ? "peek" : current));
+    setDragY(null);
+    requestAnimationFrame(() => {
+      const card = runListRef.current?.querySelector<HTMLElement>(`[data-run-id="${run.id}"]`);
+      card?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
   }
 
   async function requestSpot(run: RunRow) {
@@ -2806,7 +2815,7 @@ function MatchedRunsMap({
         ) : runsStatus === "error" ? (
           <div className="run-list-empty">Couldn&apos;t load runs. Try again.</div>
         ) : filteredRuns.length ? (
-          <div className="run-list matched-run-list">
+          <div className="run-list matched-run-list" ref={runListRef}>
             {filteredRuns.map((run) => (
               <MatchedRunCard
                 key={run.id}
@@ -2897,7 +2906,7 @@ function MatchedRunCard({
   const people = run.currentSpots <= 1 ? "1 runner" : `${run.currentSpots} runners`;
 
   return (
-    <article className={`run-card matched-map-card ${active ? "active" : ""} ${requested ? "requested" : ""}`}>
+    <article className={`run-card matched-map-card ${active ? "active" : ""} ${requested ? "requested" : ""}`} data-run-id={run.id}>
       <button className="matched-card-main" onClick={onSelect}>
         <span className="match-topline">
           <span>
