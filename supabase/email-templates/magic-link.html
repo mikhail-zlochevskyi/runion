@@ -1,0 +1,68 @@
+<!--
+  Runion — Magic Link email.
+  Paste into Supabase Dashboard → Authentication → Email Templates → Magic Link.
+  Supabase variable: {{ .ConfirmationURL }}
+  Table-based + inline styles for broad email-client support (Gmail, Outlook, Apple Mail).
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#0f0a06;">
+  <tr>
+    <td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#1a140d;border:1px solid rgba(243,235,217,0.1);border-radius:20px;overflow:hidden;">
+        <tr>
+          <td style="padding:28px 28px 8px;">
+            <span style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#f3ebd9;letter-spacing:0.5px;">
+              runi<span style="color:#f4a45c;">o</span>n
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 28px 0;">
+            <p style="margin:0 0 6px;font-family:'DM Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#f4a45c;">
+              Sign in
+            </p>
+            <h1 style="margin:0 0 12px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:500;font-size:30px;line-height:1.1;color:#f3ebd9;">
+              Your run is one tap away.
+            </h1>
+            <p style="margin:0 0 24px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:rgba(243,235,217,0.62);">
+              Tap below to sign in to Runion. The link works once and expires in an hour — open it on this device.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 28px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+              <tr>
+                <td align="center" bgcolor="#c0532a" style="border-radius:999px;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:block;padding:14px 24px;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#f3ebd9;text-decoration:none;border-radius:999px;">
+                    Sign in to Runion
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 28px 28px;">
+            <p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:rgba(243,235,217,0.38);">
+              Button not working? Paste this link into your browser:
+            </p>
+            <p style="margin:0;font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;color:rgba(243,235,217,0.62);">
+              {{ .ConfirmationURL }}
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 28px;border-top:1px solid rgba(243,235,217,0.1);">
+            <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:rgba(243,235,217,0.38);">
+              You're getting this because someone entered this email on runion.app. If that wasn't you, ignore it — nothing happens until the link is opened.
+            </p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:16px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;color:rgba(243,235,217,0.3);">
+        Runion · run with the neighbour you haven't met
+      </p>
+    </td>
+  </tr>
+</table>

@@ -79,11 +79,35 @@ async function sendWithResend(to: string, subject: string, html: string, text: s
 
 function htmlConfirm(title: string, href: string, code: string): string {
   const safe = escHtml(href);
-  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${escHtml(title)}</p>
-<p><a href="${safe}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:8px">Continue</a></p>
-<p style="word-break:break-all;font-size:13px;color:#444">If the button does not work, open:<br/>${href}</p>
-<p>Or enter this code: <strong>${escHtml(code)}</strong></p>
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0f0a06;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#0f0a06;">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#1a140d;border:1px solid rgba(243,235,217,0.1);border-radius:20px;overflow:hidden;">
+      <tr><td style="padding:28px 28px 8px;">
+        <span style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#f3ebd9;letter-spacing:0.5px;">runi<span style="color:#f4a45c;">o</span>n</span>
+      </td></tr>
+      <tr><td style="padding:8px 28px 0;">
+        <p style="margin:0 0 6px;font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#f4a45c;">Runion</p>
+        <h1 style="margin:0 0 12px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:500;font-size:28px;line-height:1.1;color:#f3ebd9;">${escHtml(title)}</h1>
+      </td></tr>
+      <tr><td style="padding:8px 28px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+          <td align="center" bgcolor="#c0532a" style="border-radius:999px;">
+            <a href="${safe}" style="display:block;padding:14px 24px;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#f3ebd9;text-decoration:none;border-radius:999px;">Continue</a>
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:16px 28px 8px;">
+        <p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:rgba(243,235,217,0.38);">Button not working? Open this link:</p>
+        <p style="margin:0;font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;color:rgba(243,235,217,0.62);">${href}</p>
+      </td></tr>
+      <tr><td style="padding:8px 28px 28px;">
+        <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:rgba(243,235,217,0.62);">Or enter this code: <strong style="color:#f3ebd9;">${escHtml(code)}</strong></p>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;color:rgba(243,235,217,0.3);">Runion · run with the neighbour you haven't met</p>
+  </td></tr>
+</table>
 </body></html>`;
 }
 
