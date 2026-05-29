@@ -2003,7 +2003,9 @@ function RequesterSocials({
           rel="noreferrer"
         >
           {platform ? <span className={`socials-tag socials-tag--${platform}`}>{platformLabel[platform]}</span> : null}
-          {socialHandle(socials)}
+          {/* Strava/Garmin share IDs are opaque gibberish — show just the label.
+              Instagram handles are human-readable, so keep them. */}
+          {platform === "strava" || platform === "garmin" ? null : socialHandle(socials)}
         </a>
       ) : null}
     </div>
