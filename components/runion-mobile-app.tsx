@@ -534,7 +534,7 @@ export function RunionMobileApp({ initialCity }: Props) {
     setAuthNotice("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: authSiteUrl() }
+      options: { redirectTo: `${authSiteUrl()}/auth/callback` }
     });
     if (error) setAuthNotice(error.message);
     setAuthBusy(false);
@@ -553,7 +553,7 @@ export function RunionMobileApp({ initialCity }: Props) {
 
     setAuthBusy(true);
     setAuthNotice("");
-    const redirectTo = authSiteUrl();
+    const redirectTo = `${authSiteUrl()}/auth/callback`;
 
     if (authMode === "magic") {
       const result = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });

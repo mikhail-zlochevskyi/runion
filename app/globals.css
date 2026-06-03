@@ -2110,6 +2110,36 @@ button {
   vertical-align: middle;
 }
 
+.auth-callback {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--espresso, #0f0a06);
+}
+
+.auth-callback-card {
+  max-width: 340px;
+  text-align: center;
+}
+
+.auth-callback-title {
+  margin: 0 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--cream, #f3ebd9);
+}
+
+.auth-callback-sub {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgba(243, 235, 217, 0.6);
+}
+
 .distance-pill {
   display: inline-block;
   margin-left: 6px;
