@@ -23,7 +23,7 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: "runion · matched runs at your pace",
-  description: "Find 2-3 runners at your pace. No random groups.",
+  description: "Run with the neighbour you haven't met.",
   applicationName: "runion",
   icons: {
     icon: [
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "runion · matched runs at your pace",
-    description: "Find 2-3 runners at your pace. No random groups.",
+    description: "Run with the neighbour you haven't met.",
     url: "https://runion.app",
     type: "website"
   }
