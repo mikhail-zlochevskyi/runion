@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_CITY } from "@/lib/config";
+import { captureUtm } from "@/lib/utm";
 
 // Auth landing page for email confirmation and magic links.
 //
@@ -18,6 +19,7 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    captureUtm();
     const supabase = createClient();
     if (!supabase) {
       router.replace(`/map#${DEFAULT_CITY}`);

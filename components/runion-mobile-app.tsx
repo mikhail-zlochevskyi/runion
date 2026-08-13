@@ -9,6 +9,7 @@ import type { CSSProperties, Dispatch, PointerEvent, ReactNode, SetStateAction }
 import type { CitySlug, PreferredGroupSize, RunAvailability, RunIntent, RunnerProfile, RunnerType } from "@/lib/types";
 import { authSiteUrl } from "@/lib/auth-site-url";
 import { CITY_CONFIG } from "@/lib/config";
+import { captureUtm, stampSignupUtm } from "@/lib/utm";
 import {
   cancelOwnRequest as apiCancelOwnRequest,
   cancelRun as apiCancelRun,
@@ -314,6 +315,12 @@ export function RunionMobileApp({ initialCity }: Props) {
     return () => window.removeEventListener("hashchange", syncCityFromHash);
   }, []);
 
+  // First-touch attribution: stash any utm_* params from the landing URL so we
+  // can stamp them onto the user's row when they finish onboarding.
+  useEffect(() => {
+    captureUtm();
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -500,12 +507,14 @@ export function RunionMobileApp({ initialCity }: Props) {
       });
 
       if (fallbackError) return { ok: false, message: fallbackError.message };
+      void stampSignupUtm(supabase, profileId);
       setDraft(nextProfile);
       return { ok: true, message: "" };
     }
 
     if (error) return { ok: false, message: error.message };
 
+    void stampSignupUtm(supabase, profileId);
     setDraft(nextProfile);
     return { ok: true, message: "" };
   }
@@ -665,6 +674,7 @@ export function RunionMobileApp({ initialCity }: Props) {
       return;
     }
 
+    void stampSignupUtm(supabase, profileId);
     setDraft(profile);
     setAppState("runs");
     router.replace(`/map#${city}`);

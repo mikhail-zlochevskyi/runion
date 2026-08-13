@@ -17,5 +17,12 @@ export default async function Home({
     }
     redirect(`/auth/callback?${qs.toString()}`);
   }
-  redirect(`/map#${DEFAULT_CITY}`);
+  // Carry utm_* through to the map so the client can capture attribution — a
+  // bare-origin server redirect would otherwise drop the query string.
+  const utm = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (key.startsWith("utm_") && typeof value === "string") utm.set(key, value);
+  }
+  const query = utm.toString();
+  redirect(`/map${query ? `?${query}` : ""}#${DEFAULT_CITY}`);
 }
