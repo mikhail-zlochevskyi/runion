@@ -125,7 +125,7 @@ const SEEN_ACTIVITY_KEY = "runion.seenActivity";
 const CITY_PICKER: { slug: CitySlug | null; label: string; live: boolean }[] = [
   { slug: "bcn", label: "Barcelona", live: true },
   { slug: "sg", label: "Singapore", live: true },
-  { slug: "ber", label: "Berlin", live: false },
+  { slug: "ber", label: "Berlin", live: true },
   { slug: "par", label: "Paris", live: false },
   { slug: null, label: "Rome", live: false },
   { slug: null, label: "New York", live: false },
