@@ -49,6 +49,14 @@ type MapRunFilter = "all" | "near_me" | "my_pace" | "today" | "has_space" | "soc
 
 const NEAR_ME_RADIUS_M = 2000;
 
+// Dark basemap. CARTO put its basemaps behind an API key (keyless requests now
+// return an "API KEY REQUIRED" watermark tile), so we use Esri's keyless
+// World Dark Gray Base instead. Esri tiles are {z}/{y}/{x} and only exist up to
+// zoom 16; maxNativeZoom lets Leaflet upscale beyond that instead of 404ing.
+const DARK_TILE_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+const DARK_TILE_OPTIONS = { maxNativeZoom: 16, maxZoom: 19 } as const;
+
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social";
 type ParticipantStatus = "requested" | "confirmed" | "declined";
@@ -2541,10 +2549,7 @@ function MatchedRunsMap({
         attributionControl: false
       });
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        subdomains: "abcd",
-        maxZoom: 19
-      }).addTo(map);
+      L.tileLayer(DARK_TILE_URL, DARK_TILE_OPTIONS).addTo(map);
 
       const youMarker = L.marker(userLocation, {
         icon: L.divIcon({
@@ -3465,10 +3470,7 @@ function PostLocationPicker({
         zoomControl: false,
         attributionControl: false,
       });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        subdomains: "abcd",
-        maxZoom: 19,
-      }).addTo(map);
+      L.tileLayer(DARK_TILE_URL, DARK_TILE_OPTIONS).addTo(map);
       map.on("click", (event) => {
         const { lat, lng } = event.latlng;
         onPickRef.current(lat, lng);
