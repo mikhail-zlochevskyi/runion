@@ -49,13 +49,23 @@ type MapRunFilter = "all" | "near_me" | "my_pace" | "today" | "has_space" | "soc
 
 const NEAR_ME_RADIUS_M = 2000;
 
-// Dark basemap. CARTO put its basemaps behind an API key (keyless requests now
-// return an "API KEY REQUIRED" watermark tile), so we use Esri's keyless
-// World Dark Gray Base instead. Esri tiles are {z}/{y}/{x} and only exist up to
-// zoom 16; maxNativeZoom lets Leaflet upscale beyond that instead of 404ing.
+// Dark basemap. Resolution order:
+//   1. NEXT_PUBLIC_MAP_TILE_URL  — a full tile template used verbatim. Paste
+//      exactly what CARTO shows for your key if their format ever differs.
+//   2. NEXT_PUBLIC_CARTO_API_KEY — CARTO dark_all with the key appended. This
+//      is the original near-black look that matches the espresso UI.
+//   3. Esri World Dark Gray Base — keyless fallback so the map is never blank
+//      (e.g. local dev without a key). Greyer than CARTO.
+// CARTO serves tiles to zoom 19; Esri only to 16, so the fallback caps
+// maxNativeZoom and lets Leaflet upscale instead of 404ing on close zooms.
+const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+const USING_CARTO = Boolean(process.env.NEXT_PUBLIC_MAP_TILE_URL || CARTO_API_KEY);
 const DARK_TILE_URL =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
-const DARK_TILE_OPTIONS = { maxNativeZoom: 16, maxZoom: 19 } as const;
+  process.env.NEXT_PUBLIC_MAP_TILE_URL ||
+  (CARTO_API_KEY
+    ? `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+    : "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}");
+const DARK_TILE_OPTIONS = USING_CARTO ? { maxZoom: 19 } : { maxNativeZoom: 16, maxZoom: 19 };
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social";
