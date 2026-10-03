@@ -63,9 +63,11 @@ const USING_CARTO = Boolean(process.env.NEXT_PUBLIC_MAP_TILE_URL || CARTO_API_KE
 const DARK_TILE_URL =
   process.env.NEXT_PUBLIC_MAP_TILE_URL ||
   (CARTO_API_KEY
-    ? `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+    ? `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`
     : "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}");
-const DARK_TILE_OPTIONS = USING_CARTO ? { maxZoom: 19 } : { maxNativeZoom: 16, maxZoom: 19 };
+const DARK_TILE_OPTIONS = USING_CARTO
+  ? { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' }
+  : { maxNativeZoom: 16, maxZoom: 19, attribution: "Tiles &copy; Esri" };
 
 type OnboardingDraft = Omit<RunnerProfile, "onboarding_completed">;
 type CoreIntent = "tempo" | "social";
@@ -2560,6 +2562,7 @@ function MatchedRunsMap({
       });
 
       L.tileLayer(DARK_TILE_URL, DARK_TILE_OPTIONS).addTo(map);
+      L.control.attribution({ prefix: false }).addTo(map);
 
       const youMarker = L.marker(userLocation, {
         icon: L.divIcon({
@@ -3481,6 +3484,7 @@ function PostLocationPicker({
         attributionControl: false,
       });
       L.tileLayer(DARK_TILE_URL, DARK_TILE_OPTIONS).addTo(map);
+      L.control.attribution({ prefix: false }).addTo(map);
       map.on("click", (event) => {
         const { lat, lng } = event.latlng;
         onPickRef.current(lat, lng);
